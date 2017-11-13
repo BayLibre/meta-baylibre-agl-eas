@@ -32,12 +32,12 @@ This package is an experimental utility to improve scheduling efficiency on big/
 + Patched packages :
 	- linux-renesas: Add configuration flags and patches required for EAS.
 
-## II. Adding the meta-baylibre-agl-easlayer to your AGL build
+## II. Adding the meta-baylibre-agl-eas layer to your AGL build
 
 1. Download meta-baylibre-agl-eas at `$AGL_TOP`
 2. Add `eas` to the feature of your AGL build<br>
 ```shell
-source meta-agl/scripts/aglsetup.sh -m $MACHINE -b <your-other-features> blsched
+source meta-agl/scripts/aglsetup.sh -m $MACHINE -b <your-other-features> eas
 ```
 
 With this `meta-baylibre-agl-eas` will be added to your `conf/bblayers.conf`.
