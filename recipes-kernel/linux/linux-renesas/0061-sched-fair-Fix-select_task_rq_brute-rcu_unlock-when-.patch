@@ -1,0 +1,38 @@
+From f4e82adc562197bc0c6411d9db0ad4497bb689a5 Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Thu, 14 Apr 2016 08:39:45 +0100
+Subject: [PATCH 61/92] sched/fair: Fix select_task_rq_brute rcu_unlock when
+ !sd
+
+To be merged with original patch
+
+(cherry picked from commit 149b57aaecf04f0e14a2d0cef807f0c499c6d6ba)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 58b468c..3c193f5 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -6160,7 +6160,7 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu)
+ 	sd = rcu_dereference(per_cpu(sd_ea, prev_cpu));
+ 
+ 	if (!sd)
+-		return prev_cpu;
++		goto unlock;
+ 
+ 	for_each_cpu_and(i, tsk_cpus_allowed(p), sched_domain_span(sd)) {
+ 		int diff;
+@@ -6193,6 +6193,7 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu)
+ 		}
+ 	}
+ 
++unlock:
+ 	rcu_read_unlock();
+ 
+ 	if (energy_cpu == prev_cpu && !cpu_overutilized(prev_cpu))
+-- 
+1.9.1
+

@@ -1,0 +1,187 @@
+From 237ff0550a99ada0cffde12845e13e52e69143a1 Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Sat, 9 May 2015 16:49:57 +0100
+Subject: [PATCH 59/92] sched: Add over-utilization/tipping point indicator
+
+Energy-aware scheduling is only meant to be active while the system is
+_not_ over-utilized. That is, there are spare cycles available to shift
+tasks around based on their actual utilization to get a more
+energy-efficient task distribution without depriving any tasks. When
+above the tipping point task placement is done the traditional way based
+on load_avg, spreading the tasks across as many cpus as possible based
+on priority scaled load to preserve smp_nice. Below the tipping point we
+want to use util_avg instead. We need to define a criteria for when we
+make the switch.
+
+The util_avg for each cpu converges towards 100% (1024) regardless of
+how many task additional task we may put on it. If we define
+over-utilized as:
+
+sum_{cpus}(rq.cfs.avg.util_avg) + margin > sum_{cpus}(rq.capacity)
+
+some individual cpus may be over-utilized running multiple tasks even
+when the above condition is false. That should be okay as long as we try
+to spread the tasks out to avoid per-cpu over-utilization as much as
+possible and if all tasks have the _same_ priority. If the latter isn't
+true, we have to consider priority to preserve smp_nice.
+
+For example, we could have n_cpus nice=-10 util_avg=55% tasks and
+n_cpus/2 nice=0 util_avg=60% tasks. Balancing based on util_avg we are
+likely to end up with nice=-10 tasks sharing cpus and nice=0 tasks
+getting their own as we 1.5*n_cpus tasks in total and 55%+55% is less
+over-utilized than 55%+60% for those cpus that have to be shared. The
+system utilization is only 85% of the system capacity, but we are
+breaking smp_nice.
+
+To be sure not to break smp_nice, we have defined over-utilization
+conservatively as when any cpu in the system is fully utilized at it's
+highest frequency instead:
+
+cpu_rq(any).cfs.avg.util_avg + margin > cpu_rq(any).capacity
+
+IOW, as soon as one cpu is (nearly) 100% utilized, we switch to load_avg
+to factor in priority to preserve smp_nice.
+
+With this definition, we can skip periodic load-balance as no cpu has an
+always-running task when the system is not over-utilized. All tasks will
+be periodic and we can balance them at wake-up. This conservative
+condition does however mean that some scenarios that could benefit from
+energy-aware decisions even if one cpu is fully utilized would not get
+those benefits.
+
+For system where some cpus might have reduced capacity on some cpus
+(RT-pressure and/or big.LITTLE), we want periodic load-balance checks as
+soon a just a single cpu is fully utilized as it might one of those with
+reduced capacity and in that case we want to migrate it.
+
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit e402a7e2f2a45377f32b2925197a747f04ca1668)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c  | 31 +++++++++++++++++++++++++------
+ kernel/sched/sched.h |  3 +++
+ 2 files changed, 28 insertions(+), 6 deletions(-)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 5e13787..db732bd 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -4715,6 +4715,8 @@ static inline void hrtick_update(struct rq *rq)
+ }
+ #endif
+ 
++static bool cpu_overutilized(int cpu);
++
+ /*
+  * The enqueue_task method is called before nr_running is
+  * increased. Here we update the fair scheduling stats and
+@@ -4725,6 +4727,7 @@ static inline void hrtick_update(struct rq *rq)
+ {
+ 	struct cfs_rq *cfs_rq;
+ 	struct sched_entity *se = &p->se;
++	int task_new = !(flags & ENQUEUE_WAKEUP);
+ 
+ 	/*
+ 	 * If in_iowait is set, the code below may not trigger any cpufreq
+@@ -4764,9 +4767,12 @@ static inline void hrtick_update(struct rq *rq)
+ 		update_cfs_shares(cfs_rq);
+ 	}
+ 
+-	if (!se)
++	if (!se) {
+ 		add_nr_running(rq, 1);
+-
++		if (!task_new && !rq->rd->overutilized &&
++		    cpu_overutilized(rq->cpu))
++			rq->rd->overutilized = true;
++	}
+ 	hrtick_update(rq);
+ }
+ 
+@@ -7578,11 +7584,12 @@ group_type group_classify(struct sched_group *group,
+  * @local_group: Does group contain this_cpu.
+  * @sgs: variable to hold the statistics for this group.
+  * @overload: Indicate more than one runnable task for any CPU.
++ * @overutilized: Indicate overutilization for any CPU.
+  */
+ static inline void update_sg_lb_stats(struct lb_env *env,
+ 			struct sched_group *group, int load_idx,
+ 			int local_group, struct sg_lb_stats *sgs,
+-			bool *overload)
++			bool *overload, bool *overutilized)
+ {
+ 	unsigned long load;
+ 	int i, nr_running;
+@@ -7616,6 +7623,9 @@ static inline void update_sg_lb_stats(struct lb_env *env,
+ 		 */
+ 		if (!nr_running && idle_cpu(i))
+ 			sgs->idle_cpus++;
++
++		if (cpu_overutilized(i))
++			*overutilized = true;
+ 	}
+ 
+ 	/* Adjust by relative CPU capacity of the group */
+@@ -7744,7 +7754,7 @@ static inline void update_sd_lb_stats(struct lb_env *env, struct sd_lb_stats *sd
+ 	struct sched_group *sg = env->sd->groups;
+ 	struct sg_lb_stats tmp_sgs;
+ 	int load_idx, prefer_sibling = 0;
+-	bool overload = false;
++	bool overload = false, overutilized = false;
+ 
+ 	if (child && child->flags & SD_PREFER_SIBLING)
+ 		prefer_sibling = 1;
+@@ -7766,7 +7776,7 @@ static inline void update_sd_lb_stats(struct lb_env *env, struct sd_lb_stats *sd
+ 		}
+ 
+ 		update_sg_lb_stats(env, sg, load_idx, local_group, sgs,
+-						&overload);
++						&overload, &overutilized);
+ 
+ 		if (local_group)
+ 			goto next_group;
+@@ -7810,8 +7820,14 @@ static inline void update_sd_lb_stats(struct lb_env *env, struct sd_lb_stats *sd
+ 		/* update overload indicator if we are at root domain */
+ 		if (env->dst_rq->rd->overload != overload)
+ 			env->dst_rq->rd->overload = overload;
+-	}
+ 
++		/* Update over-utilization (tipping point, U >= 0) indicator */
++		if (env->dst_rq->rd->overutilized != overutilized)
++			env->dst_rq->rd->overutilized = overutilized;
++	} else {
++		if (!env->dst_rq->rd->overutilized && overutilized)
++			env->dst_rq->rd->overutilized = true;
++	}
+ }
+ 
+ /**
+@@ -9192,6 +9208,9 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
+ 
+ 	if (static_branch_unlikely(&sched_numa_balancing))
+ 		task_tick_numa(rq, curr);
++
++	if (!rq->rd->overutilized && cpu_overutilized(task_cpu(curr)))
++		rq->rd->overutilized = true;
+ }
+ 
+ /*
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index b24cefa..fa98ab3 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -563,6 +563,9 @@ struct root_domain {
+ 	/* Indicate more than one runnable task for any CPU */
+ 	bool overload;
+ 
++	/* Indicate one or more cpus over-utilized (tipping point) */
++	bool overutilized;
++
+ 	/*
+ 	 * The bit corresponding to a CPU gets set here if such CPU has more
+ 	 * than one runnable -deadline task (as it is below for RT tasks).
+-- 
+1.9.1
+

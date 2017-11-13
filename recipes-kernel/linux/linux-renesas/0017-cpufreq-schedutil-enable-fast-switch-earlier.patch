@@ -1,0 +1,79 @@
+From 9286a34be80e891aebc0193be28931a9f194b23d Mon Sep 17 00:00:00 2001
+From: Viresh Kumar <viresh.kumar@linaro.org>
+Date: Tue, 15 Nov 2016 13:53:21 +0530
+Subject: [PATCH 17/92] cpufreq: schedutil: enable fast switch earlier
+
+The fast_switch_enabled flag will be used by both sugov_policy_alloc()
+and sugov_policy_free() with a later patch.
+
+Prepare for that by moving the calls to enable and disable it to the
+beginning of sugov_init() and end of sugov_exit().
+
+Signed-off-by: Viresh Kumar <viresh.kumar@linaro.org>
+Signed-off-by: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+(cherry picked from commit 4a71ce4348bb61740d411822357061f8bf870f4c)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/cpufreq_schedutil.c | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
+index 8c4e165..68f21bb 100644
+--- a/kernel/sched/cpufreq_schedutil.c
++++ b/kernel/sched/cpufreq_schedutil.c
+@@ -416,9 +416,13 @@ static int sugov_init(struct cpufreq_policy *policy)
+ 	if (policy->governor_data)
+ 		return -EBUSY;
+ 
++	cpufreq_enable_fast_switch(policy);
++
+ 	sg_policy = sugov_policy_alloc(policy);
+-	if (!sg_policy)
+-		return -ENOMEM;
++	if (!sg_policy) {
++		ret = -ENOMEM;
++		goto disable_fast_switch;
++	}
+ 
+ 	mutex_lock(&global_tunables_lock);
+ 
+@@ -456,8 +460,6 @@ static int sugov_init(struct cpufreq_policy *policy)
+ 
+ out:
+ 	mutex_unlock(&global_tunables_lock);
+-
+-	cpufreq_enable_fast_switch(policy);
+ 	return 0;
+ 
+ fail:
+@@ -468,6 +470,10 @@ static int sugov_init(struct cpufreq_policy *policy)
+ 	mutex_unlock(&global_tunables_lock);
+ 
+ 	sugov_policy_free(sg_policy);
++
++disable_fast_switch:
++	cpufreq_disable_fast_switch(policy);
++
+ 	pr_err("initialization failed (error %d)\n", ret);
+ 	return ret;
+ }
+@@ -478,8 +484,6 @@ static void sugov_exit(struct cpufreq_policy *policy)
+ 	struct sugov_tunables *tunables = sg_policy->tunables;
+ 	unsigned int count;
+ 
+-	cpufreq_disable_fast_switch(policy);
+-
+ 	mutex_lock(&global_tunables_lock);
+ 
+ 	count = gov_attr_set_put(&tunables->attr_set, &sg_policy->tunables_hook);
+@@ -490,6 +494,7 @@ static void sugov_exit(struct cpufreq_policy *policy)
+ 	mutex_unlock(&global_tunables_lock);
+ 
+ 	sugov_policy_free(sg_policy);
++	cpufreq_disable_fast_switch(policy);
+ }
+ 
+ static int sugov_start(struct cpufreq_policy *policy)
+-- 
+1.9.1
+

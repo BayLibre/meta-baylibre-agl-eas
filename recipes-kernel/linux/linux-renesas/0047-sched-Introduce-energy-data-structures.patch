@@ -1,0 +1,107 @@
+From 5e91e54c76b1a29dff30f8c5bfb7741569b3a6f8 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Fri, 14 Nov 2014 16:08:45 +0000
+Subject: [PATCH 47/92] sched: Introduce energy data structures
+
+The struct sched_group_energy represents the per sched_group related
+data which is needed for energy aware scheduling. It contains:
+
+  (1) number of elements of the idle state array
+  (2) pointer to the idle state array which comprises 'power consumption'
+      for each idle state
+  (3) number of elements of the capacity state array
+  (4) pointer to the capacity state array which comprises 'compute
+      capacity and power consumption' tuples for each capacity state
+
+The struct sched_group obtains a pointer to a struct sched_group_energy.
+
+The function pointer sched_domain_energy_f is introduced into struct
+sched_domain_topology_level which will allow the arch to pass a particular
+struct sched_group_energy from the topology shim layer into the scheduler
+core.
+
+The function pointer sched_domain_energy_f has an 'int cpu' parameter
+since the folding of two adjacent sd levels via sd degenerate doesn't work
+for all sd levels. I.e. it is not possible for example to use this feature
+to provide per-cpu energy in sd level DIE on ARM's TC2 platform.
+
+It was discussed that the folding of sd levels approach is preferable
+over the cpu parameter approach, simply because the user (the arch
+specifying the sd topology table) can introduce less errors. But since
+it is not working, the 'int cpu' parameter is the only way out. It's
+possible to use the folding of sd levels approach for
+sched_domain_flags_f and the cpu parameter approach for the
+sched_domain_energy_f at the same time though. With the use of the
+'int cpu' parameter, an extra check function has to be provided to make
+sure that all cpus spanned by a sched group are provisioned with the same
+energy data.
+
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 0bab805ddc2bbf1dae5baf44f2812392789846c7)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ include/linux/sched.h | 19 +++++++++++++++++++
+ kernel/sched/sched.h  |  1 +
+ 2 files changed, 20 insertions(+)
+
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 2e3c2a1..0522149 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1069,6 +1069,22 @@ struct sched_domain_attr {
+ 
+ extern int sched_domain_level_max;
+ 
++struct capacity_state {
++	unsigned long cap;	/* compute capacity */
++	unsigned long power;	/* power consumption at this compute capacity */
++};
++
++struct idle_state {
++	unsigned long power;	 /* power consumption in this idle state */
++};
++
++struct sched_group_energy {
++	unsigned int nr_idle_states;	/* number of idle states */
++	struct idle_state *idle_states;	/* ptr to idle state array */
++	unsigned int nr_cap_states;	/* number of capacity states */
++	struct capacity_state *cap_states; /* ptr to capacity state array */
++};
++
+ struct sched_group;
+ 
+ struct sched_domain_shared {
+@@ -1176,6 +1192,8 @@ extern void partition_sched_domains(int ndoms_new, cpumask_var_t doms_new[],
+ 
+ typedef const struct cpumask *(*sched_domain_mask_f)(int cpu);
+ typedef int (*sched_domain_flags_f)(void);
++typedef
++const struct sched_group_energy * const(*sched_domain_energy_f)(int cpu);
+ 
+ #define SDTL_OVERLAP	0x01
+ 
+@@ -1189,6 +1207,7 @@ struct sd_data {
+ struct sched_domain_topology_level {
+ 	sched_domain_mask_f mask;
+ 	sched_domain_flags_f sd_flags;
++	sched_domain_energy_f energy;
+ 	int		    flags;
+ 	int		    numa_level;
+ 	struct sd_data      data;
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index 7b34c78..46787bd 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -914,6 +914,7 @@ struct sched_group {
+ 	unsigned int group_weight;
+ 	struct sched_group_capacity *sgc;
+ 	int asym_prefer_cpu;		/* cpu of highest priority in group */
++	const struct sched_group_energy const *sge;
+ 
+ 	/*
+ 	 * The CPUs this group covers.
+-- 
+1.9.1
+

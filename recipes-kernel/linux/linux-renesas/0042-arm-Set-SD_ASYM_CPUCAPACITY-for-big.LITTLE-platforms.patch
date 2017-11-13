@@ -1,0 +1,80 @@
+From 68c09523de80d3510269aa418c5c3814c4aae56b Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Fri, 17 Jun 2016 15:03:34 +0100
+Subject: [PATCH 42/92] arm: Set SD_ASYM_CPUCAPACITY for big.LITTLE platforms
+
+Set the SD_ASYM_CPUCAPACITY flag for DIE level sched_domains
+on big.LITTLE systems.
+
+cc: Russell King <linux@arm.linux.org.uk>
+
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit 2954ca1a61107ff029d1668dadae88c5e43035e5)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm/kernel/topology.c | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/kernel/topology.c b/arch/arm/kernel/topology.c
+index e521b07..69fb4b6 100644
+--- a/arch/arm/kernel/topology.c
++++ b/arch/arm/kernel/topology.c
+@@ -154,6 +154,7 @@ struct cpu_efficiency {
+ static u32 *raw_capacity;
+ static bool cap_parsing_failed;
+ static u32 capacity_scale;
++static bool asym_cpucap;
+ 
+ static int __init parse_cpu_capacity(struct device_node *cpu_node, int cpu)
+ {
+@@ -210,6 +211,8 @@ static void normalize_cpu_capacity(void)
+ 		set_capacity_scale(cpu, capacity);
+ 		pr_debug("cpu_capacity: CPU%d cpu_capacity=%lu\n",
+ 			cpu, arch_scale_cpu_capacity(NULL, cpu));
++		if (capacity < capacity_scale)
++			asym_cpucap = true;
+ 	}
+ 	mutex_unlock(&cpu_scale_mutex);
+ }
+@@ -422,6 +425,9 @@ static void __init parse_dt_topology(void)
+ 		middle_capacity = ((max_capacity / 3)
+ 				>> (SCHED_CAPACITY_SHIFT-1)) + 1;
+ 
++	if (max_capacity && max_capacity != min_capacity)
++		asym_cpucap = true;
++
+ 	if (cap_from_dt && !cap_parsing_failed)
+ 		normalize_cpu_capacity();
+ }
+@@ -438,6 +444,9 @@ static void update_cpu_capacity(unsigned int cpu)
+ 
+ 	set_capacity_scale(cpu, cpu_capacity(cpu) / middle_capacity);
+ 
++	if (scale_cpu_capacity(NULL, cpu) < SCHED_CAPACITY_SCALE)
++		asym_cpucap = true;
++
+ 	pr_info("CPU%u: update cpu_capacity %lu\n",
+ 		cpu, arch_scale_cpu_capacity(NULL, cpu));
+ }
+@@ -553,12 +562,17 @@ static inline int cpu_corepower_flags(void)
+ 	return SD_SHARE_PKG_RESOURCES  | SD_SHARE_POWERDOMAIN;
+ }
+ 
++static inline int arm_cpu_cpu_flags(void)
++{
++	return asym_cpucap ? SD_ASYM_CPUCAPACITY : 0;
++}
++
+ static struct sched_domain_topology_level arm_topology[] = {
+ #ifdef CONFIG_SCHED_MC
+ 	{ cpu_corepower_mask, cpu_corepower_flags, SD_INIT_NAME(GMC) },
+ 	{ cpu_coregroup_mask, cpu_core_flags, SD_INIT_NAME(MC) },
+ #endif
+-	{ cpu_cpu_mask, SD_INIT_NAME(DIE) },
++	{ cpu_cpu_mask, arm_cpu_cpu_flags, SD_INIT_NAME(DIE) },
+ 	{ NULL, },
+ };
+ 
+-- 
+1.9.1
+

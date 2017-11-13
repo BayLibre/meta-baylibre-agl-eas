@@ -1,0 +1,30 @@
+From 1dc0f447d22d781d4ff4d5fa8f789bf41fd56161 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Wed, 12 Oct 2016 17:36:41 +0100
+Subject: [PATCH 79/92] sched: Call cfs_rq and sched_entity PELT tracepoints
+ also in propagate_entity_load_avg()
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 20ab5631c366a28b5c7e598107337ac622c41e31)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 3563486..489f6d3 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -3160,6 +3160,9 @@ static inline int propagate_entity_load_avg(struct sched_entity *se)
+ 	update_tg_cfs_util(cfs_rq, se);
+ 	update_tg_cfs_load(cfs_rq, se);
+ 
++	trace_sched_pelt_cfs_rq(cfs_rq);
++	trace_sched_pelt_se(se);
++
+ 	return 1;
+ }
+ 
+-- 
+1.9.1
+

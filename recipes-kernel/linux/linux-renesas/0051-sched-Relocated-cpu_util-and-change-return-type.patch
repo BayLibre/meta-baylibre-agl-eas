@@ -1,0 +1,109 @@
+From 88ce1ba602ccc9479feb7837f2c7bc074379561c Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Thu, 11 Dec 2014 15:25:29 +0000
+Subject: [PATCH 51/92] sched: Relocated cpu_util() and change return type
+
+Move cpu_util() to an earlier position in fair.c and change return
+type to unsigned long as negative usage doesn't make much sense. All
+other load and capacity related functions use unsigned long including
+the caller of cpu_util().
+
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit c5aa28c6e0792ee8a994d3e401fc619694d01f5f)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 68 ++++++++++++++++++++++++++---------------------------
+ 1 file changed, 34 insertions(+), 34 deletions(-)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index c7d9bbf..0085d4f 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -5274,6 +5274,40 @@ static long effective_load(struct task_group *tg, int cpu, long wl, long wg)
+ 
+ #endif
+ 
++/*
++ * cpu_util returns the amount of capacity of a CPU that is used by CFS
++ * tasks. The unit of the return value must be the one of capacity so we can
++ * compare the utilization with the capacity of the CPU that is available for
++ * CFS task (ie cpu_capacity).
++ *
++ * cfs_rq.avg.util_avg is the sum of running time of runnable tasks plus the
++ * recent utilization of currently non-runnable tasks on a CPU. It represents
++ * the amount of utilization of a CPU in the range [0..capacity_orig] where
++ * capacity_orig is the cpu_capacity available at the highest frequency
++ * (arch_scale_freq_capacity()).
++ * The utilization of a CPU converges towards a sum equal to or less than the
++ * current capacity (capacity_curr <= capacity_orig) of the CPU because it is
++ * the running time on this CPU scaled by capacity_curr.
++ *
++ * Nevertheless, cfs_rq.avg.util_avg can be higher than capacity_curr or even
++ * higher than capacity_orig because of unfortunate rounding in
++ * cfs.avg.util_avg or just after migrating tasks and new task wakeups until
++ * the average stabilizes with the new running time. We need to check that the
++ * utilization stays within the range of [0..capacity_orig] and cap it if
++ * necessary. Without utilization capping, a group could be seen as overloaded
++ * (CPU0 utilization at 121% + CPU1 utilization at 80%) whereas CPU1 has 20% of
++ * available capacity. We allow utilization to overshoot capacity_curr (but not
++ * capacity_orig) as it useful for predicting the capacity required after task
++ * migrations (scheduler-driven DVFS).
++ */
++static unsigned long cpu_util(int cpu)
++{
++	unsigned long util = cpu_rq(cpu)->cfs.avg.util_avg;
++	unsigned long capacity = capacity_orig_of(cpu);
++
++	return (util >= capacity) ? capacity : util;
++}
++
+ static void record_wakee(struct task_struct *p)
+ {
+ 	/*
+@@ -5783,40 +5817,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+ 	return target;
+ }
+ 
+-/*
+- * cpu_util returns the amount of capacity of a CPU that is used by CFS
+- * tasks. The unit of the return value must be the one of capacity so we can
+- * compare the utilization with the capacity of the CPU that is available for
+- * CFS task (ie cpu_capacity).
+- *
+- * cfs_rq.avg.util_avg is the sum of running time of runnable tasks plus the
+- * recent utilization of currently non-runnable tasks on a CPU. It represents
+- * the amount of utilization of a CPU in the range [0..capacity_orig] where
+- * capacity_orig is the cpu_capacity available at the highest frequency
+- * (arch_scale_freq_capacity()).
+- * The utilization of a CPU converges towards a sum equal to or less than the
+- * current capacity (capacity_curr <= capacity_orig) of the CPU because it is
+- * the running time on this CPU scaled by capacity_curr.
+- *
+- * Nevertheless, cfs_rq.avg.util_avg can be higher than capacity_curr or even
+- * higher than capacity_orig because of unfortunate rounding in
+- * cfs.avg.util_avg or just after migrating tasks and new task wakeups until
+- * the average stabilizes with the new running time. We need to check that the
+- * utilization stays within the range of [0..capacity_orig] and cap it if
+- * necessary. Without utilization capping, a group could be seen as overloaded
+- * (CPU0 utilization at 121% + CPU1 utilization at 80%) whereas CPU1 has 20% of
+- * available capacity. We allow utilization to overshoot capacity_curr (but not
+- * capacity_orig) as it useful for predicting the capacity required after task
+- * migrations (scheduler-driven DVFS).
+- */
+-static int cpu_util(int cpu)
+-{
+-	unsigned long util = cpu_rq(cpu)->cfs.avg.util_avg;
+-	unsigned long capacity = capacity_orig_of(cpu);
+-
+-	return (util >= capacity) ? capacity : util;
+-}
+-
+ static inline int task_util(struct task_struct *p)
+ {
+ 	return p->se.avg.util_avg;
+-- 
+1.9.1
+

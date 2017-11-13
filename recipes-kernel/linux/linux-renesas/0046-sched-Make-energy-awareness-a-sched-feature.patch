@@ -1,0 +1,57 @@
+From ac91525a35e79b82a09fb1ed75ee547802f3bed1 Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Tue, 13 Jan 2015 13:45:51 +0000
+Subject: [PATCH 46/92] sched: Make energy awareness a sched feature
+
+This patch introduces the ENERGY_AWARE sched feature, which is
+implemented using jump labels when SCHED_DEBUG is defined. It is
+statically set false when SCHED_DEBUG is not defined. Hence this doesn't
+allow energy awareness to be enabled without SCHED_DEBUG. This
+sched_feature knob will be replaced later with a more appropriate
+control knob when things have matured a bit.
+
+ENERGY_AWARE is based on per-entity load-tracking hence FAIR_GROUP_SCHED
+must be enable. This dependency isn't checked at compile time yet.
+
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit e3b80d193dad157c720ec29496104126dbfc67ce)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c     | 5 +++++
+ kernel/sched/features.h | 5 +++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index cb283ca..fa393d9 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -5291,6 +5291,11 @@ static void record_wakee(struct task_struct *p)
+ 	}
+ }
+ 
++static inline bool energy_aware(void)
++{
++	return sched_feat(ENERGY_AWARE);
++}
++
+ /*
+  * Detect M:N waker/wakee relationships via a switching-frequency heuristic.
+  *
+diff --git a/kernel/sched/features.h b/kernel/sched/features.h
+index 69631fa..b634151 100644
+--- a/kernel/sched/features.h
++++ b/kernel/sched/features.h
+@@ -69,3 +69,8 @@
+ SCHED_FEAT(LB_MIN, false)
+ SCHED_FEAT(ATTACH_AGE_LOAD, true)
+ 
++/*
++ * Energy aware scheduling. Use platform energy model to guide scheduling
++ * decisions optimizing for energy efficiency.
++ */
++SCHED_FEAT(ENERGY_AWARE, false)
+-- 
+1.9.1
+

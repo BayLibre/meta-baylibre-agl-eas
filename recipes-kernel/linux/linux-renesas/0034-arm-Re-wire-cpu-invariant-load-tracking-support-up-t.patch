@@ -1,0 +1,55 @@
+From a7770736a651a5e7ee12b2df95982ff7d76a6c5a Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Tue, 14 Apr 2015 16:25:31 +0100
+Subject: [PATCH 34/92] arm: Re-wire cpu-invariant load-tracking support up to
+ the scheduler
+
+Since commit 8cd5601c5060 ("sched/fair: Convert arch_scale_cpu_capacity()
+from weak function to #define") the wiring has to be done by associating
+arch_scale_cpu_capacity with the actual implementation provided by the
+arch.
+
+Define arch_scale_freq_capacity to use the arch-specific function
+scale_cpu_capacity().
+
+cc: Russell King <linux@arm.linux.org.uk>
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 496fddb12c6eeb54a2caa3413c0a591dc2762ab6)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm/include/asm/topology.h | 4 ++++
+ arch/arm/kernel/topology.c      | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/include/asm/topology.h b/arch/arm/include/asm/topology.h
+index 370f7a7..942a863 100644
+--- a/arch/arm/include/asm/topology.h
++++ b/arch/arm/include/asm/topology.h
+@@ -24,6 +24,10 @@ struct cputopo_arm {
+ void store_cpu_topology(unsigned int cpuid);
+ const struct cpumask *cpu_coregroup_mask(int cpu);
+ 
++struct sched_domain;
++#define arch_scale_cpu_capacity scale_cpu_capacity
++extern unsigned long scale_cpu_capacity(struct sched_domain *sd, int cpu);
++
+ #else
+ 
+ static inline void init_cpu_topology(void) { }
+diff --git a/arch/arm/kernel/topology.c b/arch/arm/kernel/topology.c
+index 46167bf..f0957f3 100644
+--- a/arch/arm/kernel/topology.c
++++ b/arch/arm/kernel/topology.c
+@@ -44,7 +44,7 @@
+ static DEFINE_PER_CPU(unsigned long, cpu_scale) = SCHED_CAPACITY_SCALE;
+ static DEFINE_MUTEX(cpu_scale_mutex);
+ 
+-unsigned long arch_scale_cpu_capacity(struct sched_domain *sd, int cpu)
++unsigned long scale_cpu_capacity(struct sched_domain *sd, int cpu)
+ {
+ 	return per_cpu(cpu_scale, cpu);
+ }
+-- 
+1.9.1
+

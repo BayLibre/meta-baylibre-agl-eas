@@ -1,0 +1,38 @@
+From a1ca4aea32f8ec66617aca32decdab5f0dd51182 Mon Sep 17 00:00:00 2001
+From: "T.Zhou" <t1zhou@163.com>
+Date: Wed, 23 Nov 2016 08:48:32 +0800
+Subject: [PATCH 13/92] sched/dl: Fix comment in pick_next_task_dl()
+
+Fix cut & paste oversight:
+
+  s/pull_rt_task/pull_dl_task
+
+Signed-off-by: T.Zhou <t1zhou@163.com>
+Cc: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: juri.lelli@gmail.com
+Link: http://lkml.kernel.org/r/20161123004832.GA2983@geo
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+(cherry picked from commit 176cedc4ed143745708999155c11b5717cdebb35)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/deadline.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/sched/deadline.c b/kernel/sched/deadline.c
+index 37e2449..0e4ad2a 100644
+--- a/kernel/sched/deadline.c
++++ b/kernel/sched/deadline.c
+@@ -1137,7 +1137,7 @@ struct task_struct *
+ 		pull_dl_task(rq);
+ 		lockdep_repin_lock(&rq->lock, cookie);
+ 		/*
+-		 * pull_rt_task() can drop (and re-acquire) rq->lock; this
++		 * pull_dl_task() can drop (and re-acquire) rq->lock; this
+ 		 * means a stop task can slip in, in which case we need to
+ 		 * re-start task selection.
+ 		 */
+-- 
+1.9.1
+

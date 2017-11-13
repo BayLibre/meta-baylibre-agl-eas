@@ -1,0 +1,49 @@
+From 2b32578a1c36deaddcbb61dc6a10a17356a0499f Mon Sep 17 00:00:00 2001
+From: Juri Lelli <juri.lelli@arm.com>
+Date: Wed, 31 Aug 2016 18:04:46 +0100
+Subject: [PATCH 25/92] fixup! arm: parse cpu capacity-dmips-mhz from DT
+
+(cherry picked from commit 55df048a3a8e4940c78f2a24e6e1766af18a7577)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm/kernel/topology.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/arch/arm/kernel/topology.c b/arch/arm/kernel/topology.c
+index b22868a..a26e787 100644
+--- a/arch/arm/kernel/topology.c
++++ b/arch/arm/kernel/topology.c
+@@ -143,6 +143,8 @@ static void normalize_cpu_capacity(void)
+ #ifdef CONFIG_CPU_FREQ
+ static cpumask_var_t cpus_to_visit;
+ static bool cap_parsing_done;
++static void parsing_done_workfn(struct work_struct *work);
++static DECLARE_WORK(parsing_done_work, parsing_done_workfn);
+ 
+ static int
+ init_cpu_capacity_callback(struct notifier_block *nb,
+@@ -173,6 +175,7 @@ static void normalize_cpu_capacity(void)
+ 			kfree(raw_capacity);
+ 			pr_debug("cpu_capacity: parsing done\n");
+ 			cap_parsing_done = true;
++			schedule_work(&parsing_done_work);
+ 		}
+ 	}
+ 	return 0;
+@@ -197,6 +200,13 @@ static int __init register_cpufreq_notifier(void)
+ 					 CPUFREQ_POLICY_NOTIFIER);
+ }
+ core_initcall(register_cpufreq_notifier);
++
++static void parsing_done_workfn(struct work_struct *work)
++{
++	cpufreq_unregister_notifier(&init_cpu_capacity_notifier,
++					 CPUFREQ_POLICY_NOTIFIER);
++}
++
+ #else
+ static int __init free_raw_capacity(void)
+ {
+-- 
+1.9.1
+

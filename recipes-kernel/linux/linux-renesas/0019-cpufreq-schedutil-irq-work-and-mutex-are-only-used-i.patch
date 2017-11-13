@@ -1,0 +1,71 @@
+From fad60e6f1b0de5e37cb4e0ae8a4a769ef821950f Mon Sep 17 00:00:00 2001
+From: Viresh Kumar <viresh.kumar@linaro.org>
+Date: Tue, 15 Nov 2016 13:53:23 +0530
+Subject: [PATCH 19/92] cpufreq: schedutil: irq-work and mutex are only used in
+ slow path
+
+Execute the irq-work specific initialization/exit code only when the
+fast path isn't available.
+
+Signed-off-by: Viresh Kumar <viresh.kumar@linaro.org>
+Signed-off-by: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+(cherry picked from commit 21ef57297b15a49b0c4dd4e7135c1a08e9a29a1c)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/cpufreq_schedutil.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
+index f165ba0..42a220e 100644
+--- a/kernel/sched/cpufreq_schedutil.c
++++ b/kernel/sched/cpufreq_schedutil.c
+@@ -390,15 +390,12 @@ static struct sugov_policy *sugov_policy_alloc(struct cpufreq_policy *policy)
+ 		return NULL;
+ 
+ 	sg_policy->policy = policy;
+-	init_irq_work(&sg_policy->irq_work, sugov_irq_work);
+-	mutex_init(&sg_policy->work_lock);
+ 	raw_spin_lock_init(&sg_policy->update_lock);
+ 	return sg_policy;
+ }
+ 
+ static void sugov_policy_free(struct sugov_policy *sg_policy)
+ {
+-	mutex_destroy(&sg_policy->work_lock);
+ 	kfree(sg_policy);
+ }
+ 
+@@ -432,6 +429,9 @@ static int sugov_kthread_create(struct sugov_policy *sg_policy)
+ 
+ 	sg_policy->thread = thread;
+ 	kthread_bind_mask(thread, policy->related_cpus);
++	init_irq_work(&sg_policy->irq_work, sugov_irq_work);
++	mutex_init(&sg_policy->work_lock);
++
+ 	wake_up_process(thread);
+ 
+ 	return 0;
+@@ -445,6 +445,7 @@ static void sugov_kthread_stop(struct sugov_policy *sg_policy)
+ 
+ 	kthread_flush_worker(&sg_policy->worker);
+ 	kthread_stop(sg_policy->thread);
++	mutex_destroy(&sg_policy->work_lock);
+ }
+ 
+ static struct sugov_tunables *sugov_tunables_alloc(struct sugov_policy *sg_policy)
+@@ -611,8 +612,10 @@ static void sugov_stop(struct cpufreq_policy *policy)
+ 
+ 	synchronize_sched();
+ 
+-	irq_work_sync(&sg_policy->irq_work);
+-	kthread_cancel_work_sync(&sg_policy->work);
++	if (!policy->fast_switch_enabled) {
++		irq_work_sync(&sg_policy->irq_work);
++		kthread_cancel_work_sync(&sg_policy->work);
++	}
+ }
+ 
+ static void sugov_limits(struct cpufreq_policy *policy)
+-- 
+1.9.1
+

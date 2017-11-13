@@ -1,0 +1,43 @@
+From 64537223eb2a922fd872741df1a82b1bee325f3e Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Tue, 3 Feb 2015 13:54:11 +0000
+Subject: [PATCH 63/92] sched: Disable energy-unfriendly nohz kicks
+
+With energy-aware scheduling enabled nohz_kick_needed() generates many
+nohz idle-balance kicks which lead to nothing when multiple tasks get
+packed on a single cpu to save energy. This causes unnecessary wake-ups
+and hence wastes energy. Make these conditions depend on !energy_aware()
+for now until the energy-aware nohz story gets sorted out.
+
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit a5268e57a1b257dee1ffa9cd9d670ee747a4ec88)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 360e922..bc347af 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -9150,12 +9150,13 @@ static inline bool nohz_kick_needed(struct rq *rq)
+ 	if (time_before(now, nohz.next_balance))
+ 		return false;
+ 
+-	if (rq->nr_running >= 2)
++	if (rq->nr_running >= 2 &&
++	    (!energy_aware() || cpu_overutilized(cpu)))
+ 		return true;
+ 
+ 	rcu_read_lock();
+ 	sds = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+-	if (sds) {
++	if (sds && !energy_aware()) {
+ 		/*
+ 		 * XXX: write a coherent comment on why we do this.
+ 		 * See also: http://lkml.kernel.org/r/20111202010832.602203411@sbsiddha-desk.sc.intel.com
+-- 
+1.9.1
+

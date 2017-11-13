@@ -1,0 +1,83 @@
+From 1e2c379e10555b3efa8b7f8e4552b9ddae237491 Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Tue, 13 Jan 2015 13:50:46 +0000
+Subject: [PATCH 50/92] sched: Introduce SD_SHARE_CAP_STATES sched_domain flag
+
+cpufreq is currently keeping it a secret which cpus are sharing
+clock source. The scheduler needs to know about clock domains as well
+to become more energy aware. The SD_SHARE_CAP_STATES domain flag
+indicates whether cpus belonging to the sched_domain share capacity
+states (P-states).
+
+There is no connection with cpufreq (yet). The flag must be set by
+the arch specific topology code.
+
+cc: Russell King <linux@arm.linux.org.uk>
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit d5cfb54bc10768bf25da557c1cd7c91df6ae6296)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ include/linux/sched.h |  1 +
+ kernel/sched/core.c   | 10 +++++++---
+ 2 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 0522149..fad382a 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1035,6 +1035,7 @@ extern void wake_q_add(struct wake_q_head *head,
+ #define SD_PREFER_SIBLING	0x1000	/* Prefer to place tasks in a sibling domain */
+ #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
+ #define SD_NUMA			0x4000	/* cross-node balancing */
++#define SD_SHARE_CAP_STATES	0x8000  /* Domain members share capacity state */
+ 
+ #ifdef CONFIG_SCHED_SMT
+ static inline int cpu_smt_flags(void)
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index f31ea62..b450329 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -5772,7 +5772,8 @@ static int sd_degenerate(struct sched_domain *sd)
+ 			 SD_SHARE_CPUCAPACITY |
+ 			 SD_ASYM_CPUCAPACITY |
+ 			 SD_SHARE_PKG_RESOURCES |
+-			 SD_SHARE_POWERDOMAIN)) {
++			 SD_SHARE_POWERDOMAIN |
++			 SD_SHARE_CAP_STATES)) {
+ 		if (sd->groups != sd->groups->next)
+ 			return 0;
+ 	}
+@@ -5805,7 +5806,8 @@ static int sd_degenerate(struct sched_domain *sd)
+ 				SD_SHARE_CPUCAPACITY |
+ 				SD_SHARE_PKG_RESOURCES |
+ 				SD_PREFER_SIBLING |
+-				SD_SHARE_POWERDOMAIN);
++				SD_SHARE_POWERDOMAIN |
++				SD_SHARE_CAP_STATES);
+ 		if (parent->groups->sge) {
+ 			parent->flags &= ~SD_LOAD_BALANCE;
+ 			return 0;
+@@ -6515,6 +6517,7 @@ static void claim_allocations(int cpu, struct sched_domain *sd)
+  *   SD_NUMA                - describes NUMA topologies
+  *   SD_SHARE_POWERDOMAIN   - describes shared power domain
+  *   SD_ASYM_CPUCAPACITY    - describes mixed capacity topologies
++ *   SD_SHARE_CAP_STATES    - describes shared capacity states
+  *
+  * Odd one out, which beside describing the topology has a quirk also
+  * prescribes the desired behaviour that goes along with it:
+@@ -6527,7 +6530,8 @@ static void claim_allocations(int cpu, struct sched_domain *sd)
+ 	 SD_NUMA |			\
+ 	 SD_ASYM_PACKING |		\
+ 	 SD_ASYM_CPUCAPACITY |		\
+-	 SD_SHARE_POWERDOMAIN)
++	 SD_SHARE_POWERDOMAIN |		\
++	 SD_SHARE_CAP_STATES)
+ 
+ static struct sched_domain *
+ sd_init(struct sched_domain_topology_level *tl,
+-- 
+1.9.1
+

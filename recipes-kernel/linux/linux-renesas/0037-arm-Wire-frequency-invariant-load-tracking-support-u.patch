@@ -1,0 +1,38 @@
+From d3d5aa80cf65f112c759fdd04ec6725361afa6a5 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Fri, 18 Nov 2016 12:30:31 +0000
+Subject: [PATCH 37/92] arm: Wire frequency-invariant load-tracking support up
+ to the scheduler
+
+Define arch_scale_freq_capacity to use the arch-specific function
+scale_freq_capacity().
+
+Cc: Russell King <linux@arm.linux.org.uk>
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 7049774f92be687318845bf633f314676285792f)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm/include/asm/topology.h | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm/include/asm/topology.h b/arch/arm/include/asm/topology.h
+index 942a863..981e9c2 100644
+--- a/arch/arm/include/asm/topology.h
++++ b/arch/arm/include/asm/topology.h
+@@ -28,6 +28,13 @@ struct cputopo_arm {
+ #define arch_scale_cpu_capacity scale_cpu_capacity
+ extern unsigned long scale_cpu_capacity(struct sched_domain *sd, int cpu);
+ 
++#ifdef CONFIG_CPU_FREQ
++
++#define arch_scale_freq_capacity scale_freq_capacity
++extern unsigned long scale_freq_capacity(struct sched_domain *sd, int cpu);
++
++#endif /* CONFIG_CPU_FREQ */
++
+ #else
+ 
+ static inline void init_cpu_topology(void) { }
+-- 
+1.9.1
+

@@ -1,0 +1,27 @@
+From 68769e6bf0143899b9d1559a6afc2d45b8c0bc43 Mon Sep 17 00:00:00 2001
+From: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+Date: Thu, 25 Aug 2016 15:21:45 +0900
+Subject: [PATCH 91/92] sched: Enable energy awareness a sched feature by
+ default
+
+This patch set the ENERGY_AWARE by default. If you will change
+a sched feuture, CONFIG_SCHED_DEBUG should be enabled.
+
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/features.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/sched/features.h b/kernel/sched/features.h
+index b634151..9ca672e 100644
+--- a/kernel/sched/features.h
++++ b/kernel/sched/features.h
+@@ -73,4 +73,4 @@
+  * Energy aware scheduling. Use platform energy model to guide scheduling
+  * decisions optimizing for energy efficiency.
+  */
+-SCHED_FEAT(ENERGY_AWARE, false)
++SCHED_FEAT(ENERGY_AWARE, true)
+-- 
+1.9.1
+

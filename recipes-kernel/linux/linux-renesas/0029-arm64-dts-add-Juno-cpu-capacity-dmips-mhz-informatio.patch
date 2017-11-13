@@ -1,0 +1,82 @@
+From 32b76aa4d389f58f621e704a4c67e6da9ee21df9 Mon Sep 17 00:00:00 2001
+From: Juri Lelli <juri.lelli@arm.com>
+Date: Wed, 11 Nov 2015 18:13:19 +0000
+Subject: [PATCH 29/92] arm64, dts: add Juno cpu capacity-dmips-mhz information
+
+Add Juno cpu capacity-dmips-mhz information.
+
+Cc: Rob Herring <robh+dt@kernel.org>
+Cc: Pawel Moll <pawel.moll@arm.com>
+Cc: Mark Rutland <mark.rutland@arm.com>
+Cc: Ian Campbell <ijc+devicetree@hellion.org.uk>
+Cc: Kumar Gala <galak@codeaurora.org>
+Cc: Catalin Marinas <catalin.marinas@arm.com>
+Cc: Will Deacon <will.deacon@arm.com>
+Cc: Liviu Dudau <Liviu.Dudau@arm.com>
+Cc: Sudeep Holla <sudeep.holla@arm.com>
+Cc: Arnd Bergmann <arnd@arndb.de>
+Cc: Jon Medhurst <tixy@linaro.org>
+Cc: Olof Johansson <olof@lixom.net>
+Cc: Robin Murphy <robin.murphy@arm.com>
+Cc: devicetree@vger.kernel.org
+Acked-by: Sudeep Holla <sudeep.holla@arm.com>
+Signed-off-by: Juri Lelli <juri.lelli@arm.com>
+---
+ arch/arm64/boot/dts/arm/juno.dts | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/arm/juno.dts b/arch/arm64/boot/dts/arm/juno.dts
+index 6e154d9..ac5ceb7 100644
+--- a/arch/arm64/boot/dts/arm/juno.dts
++++ b/arch/arm64/boot/dts/arm/juno.dts
+@@ -90,6 +90,7 @@
+ 			next-level-cache = <&A57_L2>;
+ 			clocks = <&scpi_dvfs 0>;
+ 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		A57_1: cpu@1 {
+@@ -100,6 +101,7 @@
+ 			next-level-cache = <&A57_L2>;
+ 			clocks = <&scpi_dvfs 0>;
+ 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		A53_0: cpu@100 {
+@@ -110,6 +112,7 @@
+ 			next-level-cache = <&A53_L2>;
+ 			clocks = <&scpi_dvfs 1>;
+ 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
++			capacity-dmips-mhz = <578>;
+ 		};
+ 
+ 		A53_1: cpu@101 {
+@@ -120,6 +123,7 @@
+ 			next-level-cache = <&A53_L2>;
+ 			clocks = <&scpi_dvfs 1>;
+ 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
++			capacity-dmips-mhz = <578>;
+ 		};
+ 
+ 		A53_2: cpu@102 {
+@@ -130,6 +134,7 @@
+ 			next-level-cache = <&A53_L2>;
+ 			clocks = <&scpi_dvfs 1>;
+ 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
++			capacity-dmips-mhz = <578>;
+ 		};
+ 
+ 		A53_3: cpu@103 {
+@@ -140,6 +145,7 @@
+ 			next-level-cache = <&A53_L2>;
+ 			clocks = <&scpi_dvfs 1>;
+ 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
++			capacity-dmips-mhz = <578>;
+ 		};
+ 
+ 		A57_L2: l2-cache0 {
+-- 
+1.9.1
+

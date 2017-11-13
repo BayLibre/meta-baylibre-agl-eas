@@ -1,0 +1,81 @@
+From 3a86f1d4b2d288f765534c1763ed698029376098 Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Fri, 14 Oct 2016 14:41:10 +0100
+Subject: [PATCH 05/92] sched/fair: Avoid pulling tasks from non-overloaded
+ higher capacity groups
+
+For asymmetric CPU capacity systems it is counter-productive for
+throughput if low capacity CPUs are pulling tasks from non-overloaded
+CPUs with higher capacity. The assumption is that higher CPU capacity is
+preferred over running alone in a group with lower CPU capacity.
+
+This patch rejects higher CPU capacity groups with one or less task per
+CPU as potential busiest group which could otherwise lead to a series of
+failing load-balancing attempts leading to a force-migration.
+
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+Signed-off-by: Peter Zijlstra (Intel) <peterz@infradead.org>
+Cc: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: dietmar.eggemann@arm.com
+Cc: freedom.tan@mediatek.com
+Cc: keita.kobayashi.ym@renesas.com
+Cc: mgalbraith@suse.de
+Cc: sgurrappadi@nvidia.com
+Cc: vincent.guittot@linaro.org
+Cc: yuyang.du@intel.com
+Link: http://lkml.kernel.org/r/1476452472-24740-5-git-send-email-morten.rasmussen@arm.com
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+(cherry picked from commit 9e0994c0a1c1f82c705f1f66388e1bcffcee8bb9)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index faf8f18..ee39bfd 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -7073,6 +7073,17 @@ static inline int sg_imbalanced(struct sched_group *group)
+ 	return false;
+ }
+ 
++/*
++ * group_smaller_cpu_capacity: Returns true if sched_group sg has smaller
++ * per-CPU capacity than sched_group ref.
++ */
++static inline bool
++group_smaller_cpu_capacity(struct sched_group *sg, struct sched_group *ref)
++{
++	return sg->sgc->min_capacity * capacity_margin <
++						ref->sgc->min_capacity * 1024;
++}
++
+ static inline enum
+ group_type group_classify(struct sched_group *group,
+ 			  struct sg_lb_stats *sgs)
+@@ -7176,6 +7187,20 @@ static bool update_sd_pick_busiest(struct lb_env *env,
+ 	if (sgs->avg_load <= busiest->avg_load)
+ 		return false;
+ 
++	if (!(env->sd->flags & SD_ASYM_CPUCAPACITY))
++		goto asym_packing;
++
++	/*
++	 * Candidate sg has no more than one task per CPU and
++	 * has higher per-CPU capacity. Migrating tasks to less
++	 * capable CPUs may harm throughput. Maximize throughput,
++	 * power/energy consequences are not considered.
++	 */
++	if (sgs->sum_nr_running <= sgs->group_weight &&
++	    group_smaller_cpu_capacity(sds->local, sg))
++		return false;
++
++asym_packing:
+ 	/* This is the busiest node in its class. */
+ 	if (!(env->sd->flags & SD_ASYM_PACKING))
+ 		return true;
+-- 
+1.9.1
+

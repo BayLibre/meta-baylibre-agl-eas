@@ -1,0 +1,124 @@
+From 1f3a3c308f275c6aeef63c5db216ae869db66dbc Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Tue, 27 Jan 2015 13:48:07 +0000
+Subject: [PATCH 56/92] sched, cpuidle: Track cpuidle state index in the
+ scheduler
+
+The idle-state of each cpu is currently pointed to by rq->idle_state but
+there isn't any information in the struct cpuidle_state that can used to
+look up the idle-state energy model data stored in struct
+sched_group_energy. For this purpose is necessary to store the idle
+state index as well. Ideally, the idle-state data should be unified.
+
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit b3f2122ee08c05f9290f5d3664446bfb59b54691)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ drivers/cpuidle/cpuidle.c |  4 ++--
+ include/linux/cpuidle.h   |  2 +-
+ kernel/sched/idle.c       |  3 ++-
+ kernel/sched/sched.h      | 21 +++++++++++++++++++++
+ 4 files changed, 26 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/cpuidle/cpuidle.c b/drivers/cpuidle/cpuidle.c
+index c73207a..78ab946 100644
+--- a/drivers/cpuidle/cpuidle.c
++++ b/drivers/cpuidle/cpuidle.c
+@@ -192,7 +192,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
+ 	}
+ 
+ 	/* Take note of the planned idle state. */
+-	sched_idle_set_state(target_state);
++	sched_idle_set_state(target_state, index);
+ 
+ 	trace_cpu_idle_rcuidle(index, dev->cpu);
+ 	time_start = ns_to_ktime(local_clock());
+@@ -205,7 +205,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
+ 	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, dev->cpu);
+ 
+ 	/* The cpu is no longer idle or about to enter idle. */
+-	sched_idle_set_state(NULL);
++	sched_idle_set_state(NULL, -1);
+ 
+ 	if (broadcast) {
+ 		if (WARN_ON_ONCE(!irqs_disabled()))
+diff --git a/include/linux/cpuidle.h b/include/linux/cpuidle.h
+index bb31373..9a8eec9 100644
+--- a/include/linux/cpuidle.h
++++ b/include/linux/cpuidle.h
+@@ -207,7 +207,7 @@ static inline int cpuidle_enter_freeze(struct cpuidle_driver *drv,
+ #endif
+ 
+ /* kernel/sched/idle.c */
+-extern void sched_idle_set_state(struct cpuidle_state *idle_state);
++extern void sched_idle_set_state(struct cpuidle_state *idle_state, int index);
+ extern void default_idle_call(void);
+ 
+ #ifdef CONFIG_ARCH_NEEDS_CPU_IDLE_COUPLED
+diff --git a/kernel/sched/idle.c b/kernel/sched/idle.c
+index 1d8718d..cf75f00 100644
+--- a/kernel/sched/idle.c
++++ b/kernel/sched/idle.c
+@@ -23,9 +23,10 @@
+  * sched_idle_set_state - Record idle state for the current CPU.
+  * @idle_state: State to record.
+  */
+-void sched_idle_set_state(struct cpuidle_state *idle_state)
++void sched_idle_set_state(struct cpuidle_state *idle_state, int index)
+ {
+ 	idle_set_state(this_rq(), idle_state);
++	idle_set_state_idx(this_rq(), index);
+ }
+ 
+ static int __read_mostly cpu_idle_force_poll;
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index 75dcd85..b24cefa 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -726,6 +726,7 @@ struct rq {
+ #ifdef CONFIG_CPU_IDLE
+ 	/* Must be inspected within a rcu lock section */
+ 	struct cpuidle_state *idle_state;
++	int idle_state_idx;
+ #endif
+ };
+ 
+@@ -1335,6 +1336,17 @@ static inline struct cpuidle_state *idle_get_state(struct rq *rq)
+ 	SCHED_WARN_ON(!rcu_read_lock_held());
+ 	return rq->idle_state;
+ }
++
++static inline void idle_set_state_idx(struct rq *rq, int idle_state_idx)
++{
++	rq->idle_state_idx = idle_state_idx;
++}
++
++static inline int idle_get_state_idx(struct rq *rq)
++{
++	WARN_ON(!rcu_read_lock_held());
++	return rq->idle_state_idx;
++}
+ #else
+ static inline void idle_set_state(struct rq *rq,
+ 				  struct cpuidle_state *idle_state)
+@@ -1345,6 +1357,15 @@ static inline struct cpuidle_state *idle_get_state(struct rq *rq)
+ {
+ 	return NULL;
+ }
++
++static inline void idle_set_state_idx(struct rq *rq, int idle_state_idx)
++{
++}
++
++static inline int idle_get_state_idx(struct rq *rq)
++{
++	return -1;
++}
+ #endif
+ 
+ extern void sysrq_sched_debug_show(void);
+-- 
+1.9.1
+

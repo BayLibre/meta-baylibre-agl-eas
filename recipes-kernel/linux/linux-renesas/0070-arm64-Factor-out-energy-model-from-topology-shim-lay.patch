@@ -1,0 +1,353 @@
+From 19b9b07f001278198a4d3aae6744213beb1a75bd Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Mon, 15 Aug 2016 22:38:20 +0100
+Subject: [PATCH 70/92] arm64: Factor out energy model from topology shim layer
+
+To be able to support multiple energy models before we have the
+full-fletched dt solution in arm64 (e.g. for platform Arm Juno and
+Hisilicon Hikey) factor out the static energy model data and the
+appropriate access function into energy_model.h.
+
+The patch uses of_match_node() to match the compatible string with the
+appropriate platform energy model data, i.e. the patch introduces a
+dependency to CONFIG_OF_FLATTREE for propagating the energy model data
+towards the task scheduler.
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 6a48e61e481ef4952be07345efb10bc5cd47d22d)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm64/kernel/energy_model.h | 177 +++++++++++++++++++++++++++++++++++++++
+ arch/arm64/kernel/topology.c     | 118 +-------------------------
+ 2 files changed, 181 insertions(+), 114 deletions(-)
+ create mode 100644 arch/arm64/kernel/energy_model.h
+
+diff --git a/arch/arm64/kernel/energy_model.h b/arch/arm64/kernel/energy_model.h
+new file mode 100644
+index 0000000..170dd84
+--- /dev/null
++++ b/arch/arm64/kernel/energy_model.h
+@@ -0,0 +1,177 @@
++/*
++ * arch/arm64/kernel/energy_model.h
++ *
++ * Copyright (C) 2016 ARM Ltd.
++ *
++ * This file is subject to the terms and conditions of the GNU General Public
++ * License.  See the file "COPYING" in the main directory of this archive
++ * for more details.
++ */
++
++#include <linux/of_fdt.h>
++
++/*
++ * Energy cost model data. There are no unit requirements for the data.
++ * Data can be normalized to any reference point, but the normalization
++ * must be consistent. That is, one bogo-joule/watt must be the same
++ * quantity for all data, but we don't care what it is.
++ */
++
++/* Juno (r0, r2) */
++
++static struct idle_state idle_states_cluster_juno_a53[] = {
++	{ .power = 56 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 56 }, /* WFI */
++	{ .power = 56 }, /* cpu-sleep-0 */
++	{ .power = 17 }, /* cluster-sleep-0 */
++};
++
++static struct idle_state idle_states_cluster_juno_a57[] = {
++	{ .power = 65 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 65 }, /* WFI */
++	{ .power = 65 }, /* cpu-sleep-0 */
++	{ .power = 24 }, /* cluster-sleep-0 */
++};
++
++static struct capacity_state cap_states_cluster_juno_a53[] = {
++	{ .cap =  235, .power = 26, }, /*  450 MHz */
++	{ .cap =  303, .power = 30, }, /*  575 MHz */
++	{ .cap =  368, .power = 39, }, /*  700 MHz */
++	{ .cap =  406, .power = 47, }, /*  775 MHz */
++	{ .cap =  447, .power = 57, }, /*  850 Mhz */
++};
++
++static struct capacity_state cap_states_cluster_juno_a57[] = {
++	{ .cap =  417, .power = 24, }, /*  450 MHz */
++	{ .cap =  579, .power = 32, }, /*  625 MHz */
++	{ .cap =  744, .power = 43, }, /*  800 MHz */
++	{ .cap =  883, .power = 49, }, /*  950 MHz */
++	{ .cap = 1024, .power = 64, }, /* 1100 MHz */
++};
++
++static struct sched_group_energy energy_cluster_juno_a53 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_juno_a53),
++	.idle_states    = idle_states_cluster_juno_a53,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_juno_a53),
++	.cap_states     = cap_states_cluster_juno_a53,
++};
++
++static struct sched_group_energy energy_cluster_juno_a57 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_juno_a57),
++	.idle_states    = idle_states_cluster_juno_a57,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_juno_a57),
++	.cap_states     = cap_states_cluster_juno_a57,
++};
++
++static struct idle_state idle_states_core_juno_a53[] = {
++	{ .power = 6 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 6 }, /* WFI */
++	{ .power = 0 }, /* cpu-sleep-0 */
++	{ .power = 0 }, /* cluster-sleep-0 */
++};
++
++static struct idle_state idle_states_core_juno_a57[] = {
++	{ .power = 15 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 15 }, /* WFI */
++	{ .power = 0  }, /* cpu-sleep-0 */
++	{ .power = 0  }, /* cluster-sleep-0 */
++};
++
++static struct capacity_state cap_states_core_juno_a53[] = {
++	{ .cap =  235, .power =  33, }, /*  450 MHz */
++	{ .cap =  302, .power =  46, }, /*  575 MHz */
++	{ .cap =  368, .power =  61, }, /*  700 MHz */
++	{ .cap =  406, .power =  76, }, /*  775 MHz */
++	{ .cap =  447, .power =  93, }, /*  850 Mhz */
++};
++
++static struct capacity_state cap_states_core_juno_a57[] = {
++	{ .cap =  417, .power = 168, }, /*  450 MHz */
++	{ .cap =  579, .power = 251, }, /*  625 MHz */
++	{ .cap =  744, .power = 359, }, /*  800 MHz */
++	{ .cap =  883, .power = 479, }, /*  950 MHz */
++	{ .cap = 1024, .power = 616, }, /* 1100 MHz */
++};
++
++static struct sched_group_energy energy_core_juno_a53 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_core_juno_a53),
++	.idle_states    = idle_states_core_juno_a53,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_core_juno_a53),
++	.cap_states     = cap_states_core_juno_a53,
++};
++
++static struct sched_group_energy energy_core_juno_a57 = {
++	  .nr_idle_states = ARRAY_SIZE(idle_states_core_juno_a57),
++	  .idle_states    = idle_states_core_juno_a57,
++	  .nr_cap_states  = ARRAY_SIZE(cap_states_core_juno_a57),
++	  .cap_states     = cap_states_core_juno_a57,
++};
++
++/* An energy model contains core and cluster sched group energy for 2
++ * clusters (cluster id 0 and 1). set_energy_model() relies on this
++ * feature. It is enforced by a BUG_ON in energy().
++ */
++
++struct energy_model {
++	struct sched_group_energy *core_energy[2];
++	struct sched_group_energy *cluster_energy[2];
++};
++
++static struct energy_model juno_model = {
++	{ &energy_core_juno_a57, &energy_core_juno_a53, },
++	{ &energy_cluster_juno_a57, &energy_cluster_juno_a53, },
++};
++
++static struct of_device_id model_matches[] = {
++	{ .compatible = "arm,juno", .data = &juno_model },
++	{},
++};
++
++static struct sched_group_energy **core_energy, **cluster_energy;
++
++static void __init set_energy_model(void)
++{
++	const struct of_device_id *match;
++	struct energy_model *em;
++
++	BUG_ON(core_energy || cluster_energy);
++
++	match = of_match_node(model_matches, of_root);
++
++	if (!match)
++		return;
++
++	em = (struct energy_model *) match->data;
++
++	core_energy = em->core_energy;
++	cluster_energy = em->cluster_energy;
++
++	pr_debug("energy model core[0,1]=[%p,%p] cluster=[%p,%p]\n",
++		 em->core_energy[0], em->core_energy[1],
++		 em->cluster_energy[0], em->cluster_energy[1]);
++}
++
++static inline
++struct sched_group_energy *energy(int cpu, struct sched_group_energy **sge)
++{
++	int idx = cpu_topology[cpu].cluster_id;
++
++	BUG_ON(idx != 0 && idx != 1);
++
++	pr_debug("cpu=%d %s%s[%d]=%p\n", cpu, (sge == core_energy) ?
++		 "core" : "cluster", "_energy", idx, sge[idx]);
++
++	return sge[idx];
++}
++
++static inline
++const struct sched_group_energy * const cpu_core_energy(int cpu)
++{
++	return core_energy ? energy(cpu, core_energy) : NULL;
++}
++
++static inline
++const struct sched_group_energy * const cpu_cluster_energy(int cpu)
++{
++	return cluster_energy ? energy(cpu, cluster_energy) : NULL;
++}
+diff --git a/arch/arm64/kernel/topology.c b/arch/arm64/kernel/topology.c
+index 761fcb6..baaab53 100644
+--- a/arch/arm64/kernel/topology.c
++++ b/arch/arm64/kernel/topology.c
+@@ -26,6 +26,8 @@
+ #include <asm/cputype.h>
+ #include <asm/topology.h>
+ 
++#include "energy_model.h"
++
+ static DEFINE_PER_CPU(unsigned long, cpu_scale) = SCHED_CAPACITY_SCALE;
+ static DEFINE_MUTEX(cpu_scale_mutex);
+ static bool asym_cpucap;
+@@ -503,6 +505,8 @@ static int __init parse_dt_topology(void)
+ 		goto out;
+ 	}
+ 
++	set_energy_model();
++
+ 	ret = parse_cluster(map, 0);
+ 	if (ret != 0)
+ 		goto out_map;
+@@ -530,120 +534,6 @@ static int __init parse_dt_topology(void)
+ struct cpu_topology cpu_topology[NR_CPUS];
+ EXPORT_SYMBOL_GPL(cpu_topology);
+ 
+-/*
+- * ARM JUNO specific energy cost model data. There are no unit requirements for
+- * the data. Data can be normalized to any reference point, but the
+- * normalization must be consistent. That is, one bogo-joule/watt must be the
+- * same quantity for all data, but we don't care what it is.
+- */
+-
+-static struct idle_state idle_states_cluster_a53[] = {
+-	{ .power = 56 }, /* arch_cpu_idle() (active idle) = WFI */
+-	{ .power = 56 }, /* WFI */
+-	{ .power = 56 }, /* cpu-sleep-0 */
+-	{ .power = 17 }, /* cluster-sleep-0 */
+-};
+-
+-static struct idle_state idle_states_cluster_a57[] = {
+-	{ .power = 65 }, /* arch_cpu_idle() (active idle) = WFI */
+-	{ .power = 65 }, /* WFI */
+-	{ .power = 65 }, /* cpu-sleep-0 */
+-	{ .power = 24 }, /* cluster-sleep-0 */
+-};
+-
+-static struct capacity_state cap_states_cluster_a53[] = {
+-        /* Power per cluster */
+-	{ .cap =  235, .power = 26, }, /*  450 MHz */
+-	{ .cap =  303, .power = 30, }, /*  575 MHz */
+-	{ .cap =  368, .power = 39, }, /*  700 MHz */
+-	{ .cap =  406, .power = 47, }, /*  775 MHz */
+-	{ .cap =  447, .power = 57, }, /*  850 Mhz */
+-};
+-
+-static struct capacity_state cap_states_cluster_a57[] = {
+-        /* Power per cluster */
+-	{ .cap =  417, .power = 24, }, /*  450 MHz */
+-	{ .cap =  579, .power = 32, }, /*  625 MHz */
+-	{ .cap =  744, .power = 43, }, /*  800 MHz */
+-	{ .cap =  883, .power = 49, }, /*  950 MHz */
+-	{ .cap = 1024, .power = 64, }, /* 1100 MHz */
+-};
+-
+-static struct sched_group_energy energy_cluster_a53 = {
+-	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_a53),
+-	.idle_states    = idle_states_cluster_a53,
+-	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_a53),
+-	.cap_states     = cap_states_cluster_a53,
+-};
+-
+-static struct sched_group_energy energy_cluster_a57 = {
+-	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_a57),
+-	.idle_states    = idle_states_cluster_a57,
+-	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_a57),
+-	.cap_states     = cap_states_cluster_a57,
+-};
+-
+-static struct idle_state idle_states_core_a53[] = {
+-	{ .power = 6 }, /* arch_cpu_idle() (active idle) = WFI */
+-	{ .power = 6 }, /* WFI */
+-	{ .power = 0 }, /* cpu-sleep-0 */
+-	{ .power = 0 }, /* cluster-sleep-0 */
+-};
+-
+-static struct idle_state idle_states_core_a57[] = {
+-	{ .power = 15 }, /* arch_cpu_idle() (active idle) = WFI */
+-	{ .power = 15 }, /* WFI */
+-	{ .power = 0  }, /* cpu-sleep-0 */
+-	{ .power = 0  }, /* cluster-sleep-0 */
+-};
+-
+-static struct capacity_state cap_states_core_a53[] = {
+-        /* Power per cpu */
+-	{ .cap =  235, .power =  33, }, /*  450 MHz */
+-	{ .cap =  302, .power =  46, }, /*  575 MHz */
+-	{ .cap =  368, .power =  61, }, /*  700 MHz */
+-	{ .cap =  406, .power =  76, }, /*  775 MHz */
+-	{ .cap =  447, .power =  93, }, /*  850 Mhz */
+-};
+-
+-static struct capacity_state cap_states_core_a57[] = {
+-        /* Power per cpu */
+-	{ .cap =  417, .power = 168, }, /*  450 MHz */
+-	{ .cap =  579, .power = 251, }, /*  625 MHz */
+-	{ .cap =  744, .power = 359, }, /*  800 MHz */
+-	{ .cap =  883, .power = 479, }, /*  950 MHz */
+-	{ .cap = 1024, .power = 616, }, /* 1100 MHz */
+-};
+-
+-static struct sched_group_energy energy_core_a53 = {
+-	.nr_idle_states = ARRAY_SIZE(idle_states_core_a53),
+-	.idle_states    = idle_states_core_a53,
+-	.nr_cap_states  = ARRAY_SIZE(cap_states_core_a53),
+-	.cap_states     = cap_states_core_a53,
+-};
+-
+-static struct sched_group_energy energy_core_a57 = {
+-	  .nr_idle_states = ARRAY_SIZE(idle_states_core_a57),
+-	  .idle_states    = idle_states_core_a57,
+-	  .nr_cap_states  = ARRAY_SIZE(cap_states_core_a57),
+-	  .cap_states     = cap_states_core_a57,
+-};
+-
+-/* sd energy functions */
+-static inline
+-const struct sched_group_energy * const cpu_cluster_energy(int cpu)
+-{
+-	return cpu_topology[cpu].cluster_id ? &energy_cluster_a53 :
+-			&energy_cluster_a57;
+-}
+-
+-static inline
+-const struct sched_group_energy * const cpu_core_energy(int cpu)
+-{
+-	return cpu_topology[cpu].cluster_id ? &energy_core_a53 :
+-			&energy_core_a57;
+-}
+-
+ const struct cpumask *cpu_coregroup_mask(int cpu)
+ {
+ 	return &cpu_topology[cpu].core_sibling;
+-- 
+1.9.1
+

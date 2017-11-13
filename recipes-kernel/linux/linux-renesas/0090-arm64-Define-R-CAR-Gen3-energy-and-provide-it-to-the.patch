@@ -1,0 +1,224 @@
+From 5881cc9ff86977d3d506f9f9549f2ffcca0fb932 Mon Sep 17 00:00:00 2001
+From: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+Date: Fri, 24 Mar 2017 20:10:51 +0900
+Subject: [PATCH 90/92] arm64: Define R-CAR Gen3 energy and provide it to the
+ scheduler
+
+Set the capacity and the power for R-CAR H3 and M3.
+This value is based on the result of the evaluation.
+
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm64/kernel/energy_model.h | 186 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 186 insertions(+)
+
+diff --git a/arch/arm64/kernel/energy_model.h b/arch/arm64/kernel/energy_model.h
+index 0a7c134..c2aae4f 100644
+--- a/arch/arm64/kernel/energy_model.h
++++ b/arch/arm64/kernel/energy_model.h
+@@ -171,6 +171,178 @@
+ 	.cap_states     = cap_states_core_hikey,
+ };
+ 
++/* R-Car Gen3 */
++
++static struct idle_state idle_states_cluster_h3_a53[] = {
++	{ .power = 17 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 17 }, /* WFI */
++	{ .power =  0 }, /* cpu-sleep-0 */
++	{ .power =  0 }, /* cluster-sleep-0 */
++};
++
++static struct idle_state idle_states_cluster_h3_a57[] = {
++	{ .power = 112 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 112 }, /* WFI */
++	{ .power =   0 }, /* cpu-sleep-0 */
++	{ .power =   0 }, /* cluster-sleep-0 */
++};
++
++static struct capacity_state cap_states_cluster_h3_a53[] = {
++	/* Power per cluster */
++	{ .cap =  379, .power = 16, }, /* 1200 MHz */
++};
++
++static struct capacity_state cap_states_cluster_h3_a57[] = {
++	/* Power per cluster */
++	{ .cap =  308, .power =  33, }, /*  500 MHz */
++	{ .cap =  596, .power =  71, }, /* 1000 MHz */
++	{ .cap =  898, .power = 112, }, /* 1500 MHz */
++	{ .cap =  965, .power = 126, }, /* 1600 MHz */
++	{ .cap = 1024, .power = 154, }, /* 1700 MHz */
++};
++
++static struct sched_group_energy energy_cluster_h3_a53 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_h3_a53),
++	.idle_states    = idle_states_cluster_h3_a53,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_h3_a53),
++	.cap_states     = cap_states_cluster_h3_a53,
++};
++
++static struct sched_group_energy energy_cluster_h3_a57 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_h3_a57),
++	.idle_states    = idle_states_cluster_h3_a57,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_h3_a57),
++	.cap_states     = cap_states_cluster_h3_a57,
++};
++
++static struct idle_state idle_states_core_h3_a53[] = {
++	{ .power = 17 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 17 }, /* WFI */
++	{ .power =  0 }, /* cpu-sleep-0 */
++	{ .power =  0 }, /* cluster-sleep-0 */
++};
++
++static struct idle_state idle_states_core_h3_a57[] = {
++	{ .power = 71 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 71 }, /* WFI */
++	{ .power =  0 }, /* cpu-sleep-0 */
++	{ .power =  0 }, /* cluster-sleep-0 */
++};
++
++static struct capacity_state cap_states_core_h3_a53[] = {
++	/* Power per cpu */
++	{ .cap =  379, .power = 131, }, /* 1200 MHz */
++};
++
++static struct capacity_state cap_states_core_h3_a57[] = {
++	/* Power per cpu */
++	{ .cap =  308, .power =  315, }, /*  500 MHz */
++	{ .cap =  596, .power =  618, }, /* 1000 MHz */
++	{ .cap =  898, .power =  934, }, /* 1500 MHz */
++	{ .cap =  965, .power = 1044, }, /* 1600 MHz */
++	{ .cap = 1024, .power = 1286, }, /* 1700 MHz */
++};
++
++static struct sched_group_energy energy_core_h3_a53 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_core_h3_a53),
++	.idle_states    = idle_states_core_h3_a53,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_core_h3_a53),
++	.cap_states     = cap_states_core_h3_a53,
++};
++
++static struct sched_group_energy energy_core_h3_a57 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_core_h3_a57),
++	.idle_states    = idle_states_core_h3_a57,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_core_h3_a57),
++	.cap_states     = cap_states_core_h3_a57,
++};
++
++static struct idle_state idle_states_cluster_m3_a53[] = {
++	{ .power = 33 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 33 }, /* WFI */
++	{ .power =  0 }, /* cpu-sleep-0 */
++	{ .power =  0 }, /* cluster-sleep-0 */
++};
++
++static struct idle_state idle_states_cluster_m3_a57[] = {
++	{ .power = 66 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 66 }, /* WFI */
++	{ .power =  0 }, /* cpu-sleep-0 */
++	{ .power =  0 }, /* cluster-sleep-0 */
++};
++
++static struct capacity_state cap_states_cluster_m3_a53[] = {
++	/* Power per cluster */
++	{ .cap =  362, .power = 33, }, /* 1200 MHz */
++};
++
++static struct capacity_state cap_states_cluster_m3_a57[] = {
++	/* Power per cluster */
++	{ .cap =  293, .power =  17, }, /*  500 MHz */
++	{ .cap =  560, .power =  42, }, /* 1000 MHz */
++	{ .cap =  853, .power =  66, }, /* 1500 MHz */
++	{ .cap =  910, .power =  72, }, /* 1600 MHz */
++	{ .cap =  967, .power =  90, }, /* 1700 MHz */
++	{ .cap = 1024, .power = 115, }, /* 1800 MHz */
++};
++
++static struct sched_group_energy energy_cluster_m3_a53 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_m3_a53),
++	.idle_states    = idle_states_cluster_m3_a53,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_m3_a53),
++	.cap_states     = cap_states_cluster_m3_a53,
++};
++
++static struct sched_group_energy energy_cluster_m3_a57 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_cluster_m3_a57),
++	.idle_states    = idle_states_cluster_m3_a57,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_cluster_m3_a57),
++	.cap_states     = cap_states_cluster_m3_a57,
++};
++
++static struct idle_state idle_states_core_m3_a53[] = {
++	{ .power = 16 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 16 }, /* WFI */
++	{ .power =  0 }, /* cpu-sleep-0 */
++	{ .power =  0 }, /* cluster-sleep-0 */
++};
++
++static struct idle_state idle_states_core_m3_a57[] = {
++	{ .power = 83 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 83 }, /* WFI */
++	{ .power =  0 }, /* cpu-sleep-0 */
++	{ .power =  0 }, /* cluster-sleep-0 */
++};
++
++static struct capacity_state cap_states_core_m3_a53[] = {
++	/* Power per cpu */
++	{ .cap =  362, .power = 131, }, /* 1200 MHz */
++};
++
++static struct capacity_state cap_states_core_m3_a57[] = {
++	/* Power per cpu */
++	{ .cap =  293, .power =  299, }, /*  500 MHz */
++	{ .cap =  560, .power =  581, }, /* 1000 MHz */
++	{ .cap =  853, .power =  888, }, /* 1500 MHz */
++	{ .cap =  910, .power = 1098, }, /* 1600 MHz */
++	{ .cap =  967, .power = 1179, }, /* 1700 MHz */
++	{ .cap = 1024, .power = 1421, }, /* 1800 MHz */
++};
++
++static struct sched_group_energy energy_core_m3_a53 = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_core_m3_a53),
++	.idle_states    = idle_states_core_m3_a53,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_core_m3_a53),
++	.cap_states     = cap_states_core_m3_a53,
++};
++
++static struct sched_group_energy energy_core_m3_a57 = {
++	  .nr_idle_states = ARRAY_SIZE(idle_states_core_m3_a57),
++	  .idle_states    = idle_states_core_m3_a57,
++	  .nr_cap_states  = ARRAY_SIZE(cap_states_core_m3_a57),
++	  .cap_states     = cap_states_core_m3_a57,
++};
++
+ /* An energy model contains core, cluster and system sched group energy
+  * for 2 clusters (cluster id 0 and 1). set_energy_model() relies on
+  * this feature. It is enforced by a BUG_ON in energy().
+@@ -194,9 +366,23 @@ struct energy_model {
+ 	{ &energy_system_hikey, &energy_system_hikey, },
+ };
+ 
++static struct energy_model r8a7795_model = {
++	{ &energy_core_h3_a57, &energy_core_h3_a53, },
++	{ &energy_cluster_h3_a57, &energy_cluster_h3_a53, },
++	{},
++};
++
++static struct energy_model r8a7796_model = {
++	{ &energy_core_m3_a57, &energy_core_m3_a53, },
++	{ &energy_cluster_m3_a57, &energy_cluster_m3_a53, },
++	{},
++};
++
+ static struct of_device_id model_matches[] = {
+ 	{ .compatible = "arm,juno", .data = &juno_model },
+ 	{ .compatible = "hisilicon,hi6220-hikey", .data = &hikey_model },
++	{ .compatible = "renesas,r8a7795", .data = &r8a7795_model },
++	{ .compatible = "renesas,r8a7796", .data = &r8a7796_model },
+ 	{},
+ };
+ 
+-- 
+1.9.1
+

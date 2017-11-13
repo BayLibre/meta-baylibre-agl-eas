@@ -1,0 +1,47 @@
+From 05c05d839fb3a94d5e07822d06cf0ae8bb8b564d Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Fri, 14 Oct 2016 14:41:12 +0100
+Subject: [PATCH 06/92] sched/fair: Fix incorrect comment for capacity_margin
+
+The comment for capacity_margin introduced in:
+
+  3273163c6775 ("sched/fair: Let asymmetric CPU configurations balance at wake-up")
+
+... got its usage the wrong way round - fix it.
+
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+Signed-off-by: Peter Zijlstra (Intel) <peterz@infradead.org>
+Cc: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: dietmar.eggemann@arm.com
+Cc: freedom.tan@mediatek.com
+Cc: keita.kobayashi.ym@renesas.com
+Cc: mgalbraith@suse.de
+Cc: sgurrappadi@nvidia.com
+Cc: vincent.guittot@linaro.org
+Cc: yuyang.du@intel.com
+Link: http://lkml.kernel.org/r/1476452472-24740-7-git-send-email-morten.rasmussen@arm.com
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+(cherry picked from commit 893c5d2279041afeb593f1fa8edd9d02edf5b7cb)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index ee39bfd..5e6c00a 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -109,7 +109,7 @@ enum sched_tunable_scaling sysctl_sched_tunable_scaling
+ 
+ /*
+  * The margin used when comparing utilization with CPU capacity:
+- * util * 1024 < capacity * margin
++ * util * margin < capacity * 1024
+  */
+ unsigned int capacity_margin = 1280; /* ~20% */
+ 
+-- 
+1.9.1
+

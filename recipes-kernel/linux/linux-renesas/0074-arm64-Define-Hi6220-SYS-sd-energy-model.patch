@@ -1,0 +1,69 @@
+From 18204f2d5c286cde5c83e50c153ef678cb08ecf9 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Thu, 18 Aug 2016 14:27:09 +0100
+Subject: [PATCH 74/92] arm64: Define Hi6220 SYS sd energy model
+
+Hi6220 has a single frequency domain spanning the two clusters. It
+needs the SYS sched domain (sd) to let the EAS algorithm work
+properly.
+
+The SD_SHARE_CAP_STATES flag is not set on SYS sd.
+
+This lets sd_ea (highest sd w/ energy model data) point to the SYS
+sd whereas sd_scs (highest sd w/ SD_SHARE_CAP_STATES set) points to
+the DIE sd. This setup allows the code in sched_group_energy() to
+set sg_shared_cap to the single sched group of the SYS sd covering
+all the cpus in the system as they are all part of the single
+frequency domain.
+
+The capacity and idle state vectors only contain entries w/ power
+values equal zero, so there is no system-wide energy contribution.
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 364845656d93e1722081038e09c4781fa7cfb961)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm64/kernel/energy_model.h | 20 +++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/kernel/energy_model.h b/arch/arm64/kernel/energy_model.h
+index 4a86fa3..0a7c134 100644
+--- a/arch/arm64/kernel/energy_model.h
++++ b/arch/arm64/kernel/energy_model.h
+@@ -109,6 +109,24 @@
+ 
+ /* HiKey */
+ 
++static struct idle_state idle_states_system_hikey[] = {
++	{ .power = 0 }, /* arch_cpu_idle() (active idle) = WFI */
++	{ .power = 0 }, /* WFI */
++	{ .power = 0 }, /* cpu-sleep */
++	{ .power = 0 }, /* cluster-sleep */
++};
++
++static struct capacity_state cap_states_system_hikey[] = {
++	{ .cap = 1024, .power = 0, },
++};
++
++static struct sched_group_energy energy_system_hikey = {
++	.nr_idle_states = ARRAY_SIZE(idle_states_system_hikey),
++	.idle_states    = idle_states_system_hikey,
++	.nr_cap_states  = ARRAY_SIZE(cap_states_system_hikey),
++	.cap_states     = cap_states_system_hikey,
++};
++
+ static struct idle_state idle_states_cluster_hikey[] = {
+ 	{ .power = 107 }, /* arch_cpu_idle() (active idle) = WFI */
+ 	{ .power = 107 }, /* WFI */
+@@ -173,7 +191,7 @@ struct energy_model {
+ static struct energy_model hikey_model = {
+ 	{ &energy_core_hikey, &energy_core_hikey, },
+ 	{ &energy_cluster_hikey, &energy_cluster_hikey, },
+-	{},
++	{ &energy_system_hikey, &energy_system_hikey, },
+ };
+ 
+ static struct of_device_id model_matches[] = {
+-- 
+1.9.1
+

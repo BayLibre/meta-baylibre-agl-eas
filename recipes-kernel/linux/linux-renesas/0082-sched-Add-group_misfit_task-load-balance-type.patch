@@ -1,0 +1,141 @@
+From b58a2c49fdbb556dcc51f750f77424063d92db3c Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Thu, 25 Feb 2016 12:47:54 +0000
+Subject: [PATCH 82/92] sched: Add group_misfit_task load-balance type
+
+To maximize throughput in systems with reduced capacity cpus (e.g.
+high RT/IRQ load and/or ARM big.LITTLE) load-balancing has to consider
+task and cpu utilization as well as per-cpu compute capacity when
+load-balancing in addition to the current average load based
+load-balancing policy. Tasks that are scheduled on a reduced capacity
+cpu need to be identified and migrated to a higher capacity cpu if
+possible.
+
+To implement this additional policy an additional group_type
+(load-balance scenario) is added: group_misfit_task. This represents
+scenarios where a sched_group has tasks that are not suitable for its
+per-cpu capacity. group_misfit_task is only considered if the system is
+not overloaded in any other way (group_imbalanced or group_overloaded).
+
+Identifying misfit tasks requires the rq lock to be held. To avoid
+taking remote rq locks to examine source sched_groups for misfit tasks,
+each cpu is responsible for tracking misfit tasks themselves and update
+the rq->misfit_task flag. This means checking task utilization when
+tasks are scheduled and on sched_tick.
+
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit a1a42660d90a077df8412b6ca763ba76506da8e6)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c  | 29 ++++++++++++++++++++++-------
+ kernel/sched/sched.h |  1 +
+ 2 files changed, 23 insertions(+), 7 deletions(-)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index cf60d93..e7fd15e 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -6627,6 +6627,8 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
+ 	if (hrtick_enabled(rq))
+ 		hrtick_start_fair(rq, p);
+ 
++	rq->misfit_task = !task_fits_max(p, rq->cpu);
++
+ 	return p;
+ simple:
+ 	cfs_rq = &rq->cfs;
+@@ -6648,9 +6650,12 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
+ 	if (hrtick_enabled(rq))
+ 		hrtick_start_fair(rq, p);
+ 
++	rq->misfit_task = !task_fits_max(p, rq->cpu);
++
+ 	return p;
+ 
+ idle:
++	rq->misfit_task = 0;
+ 	/*
+ 	 * This is OK, because current is on_cpu, which avoids it being picked
+ 	 * for load-balance and preemption/IRQs are still disabled avoiding
+@@ -6863,6 +6868,13 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p, bool preemp
+ 
+ enum fbq_type { regular, remote, all };
+ 
++enum group_type {
++	group_other = 0,
++	group_misfit_task,
++	group_imbalanced,
++	group_overloaded,
++};
++
+ #define LBF_ALL_PINNED	0x01
+ #define LBF_NEED_BREAK	0x02
+ #define LBF_DST_PINNED  0x04
+@@ -7338,12 +7350,6 @@ static unsigned long task_h_load(struct task_struct *p)
+ 
+ /********** Helpers for find_busiest_group ************************/
+ 
+-enum group_type {
+-	group_other = 0,
+-	group_imbalanced,
+-	group_overloaded,
+-};
+-
+ /*
+  * sg_lb_stats - stats of a sched_group required for load_balancing
+  */
+@@ -7359,6 +7365,7 @@ struct sg_lb_stats {
+ 	unsigned int group_weight;
+ 	enum group_type group_type;
+ 	int group_no_capacity;
++	int group_misfit_task; /* A cpu has a task too big for its capacity */
+ #ifdef CONFIG_NUMA_BALANCING
+ 	unsigned int nr_numa_running;
+ 	unsigned int nr_preferred_running;
+@@ -7656,6 +7663,9 @@ group_type group_classify(struct sched_group *group,
+ 	if (sg_imbalanced(group))
+ 		return group_imbalanced;
+ 
++	if (sgs->group_misfit_task)
++		return group_misfit_task;
++
+ 	return group_other;
+ }
+ 
+@@ -7707,8 +7717,11 @@ static inline void update_sg_lb_stats(struct lb_env *env,
+ 		if (!nr_running && idle_cpu(i))
+ 			sgs->idle_cpus++;
+ 
+-		if (cpu_overutilized(i))
++		if (cpu_overutilized(i)) {
+ 			*overutilized = true;
++			if (!sgs->group_misfit_task && rq->misfit_task)
++				sgs->group_misfit_task = capacity_of(i);
++		}
+ 	}
+ 
+ 	/* Adjust by relative CPU capacity of the group */
+@@ -9307,6 +9320,8 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
+ 
+ 	if (!rq->rd->overutilized && cpu_overutilized(task_cpu(curr)))
+ 		rq->rd->overutilized = true;
++
++	rq->misfit_task = !task_fits_max(curr, rq->cpu);
+ }
+ 
+ /*
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index fa98ab3..704d8a4 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -611,6 +611,7 @@ struct rq {
+ #endif
+ 	#define CPU_LOAD_IDX_MAX 5
+ 	unsigned long cpu_load[CPU_LOAD_IDX_MAX];
++	unsigned int misfit_task;
+ #ifdef CONFIG_NO_HZ_COMMON
+ #ifdef CONFIG_SMP
+ 	unsigned long last_load_update_tick;
+-- 
+1.9.1
+

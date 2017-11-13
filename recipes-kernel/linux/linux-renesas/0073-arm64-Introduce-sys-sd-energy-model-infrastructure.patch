@@ -1,0 +1,126 @@
+From dabca795d8793a16cbbce37b0cc187d2a65cd50e Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Thu, 18 Aug 2016 12:06:07 +0100
+Subject: [PATCH 73/92] arm64: Introduce sys sd energy model infrastructure
+
+Allow the energy model to contain a system level besides the already
+existing core and cluster level.
+
+This is necessary for platforms with frequency domains spanning all
+cpus to let the EAS algorithm work properly.
+
+The whole idea of this system level has to be rethought once
+the idea of the 'struct sched_domain_shared' gets more momentum:
+
+https://lkml.org/lkml/2016/6/16/209
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 83a776c78d6e2885f2821a35c78e465c60726244)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm64/kernel/energy_model.h | 28 ++++++++++++++++++++--------
+ arch/arm64/kernel/topology.c     |  1 +
+ 2 files changed, 21 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm64/kernel/energy_model.h b/arch/arm64/kernel/energy_model.h
+index a71c78d..4a86fa3 100644
+--- a/arch/arm64/kernel/energy_model.h
++++ b/arch/arm64/kernel/energy_model.h
+@@ -153,24 +153,27 @@
+ 	.cap_states     = cap_states_core_hikey,
+ };
+ 
+-/* An energy model contains core and cluster sched group energy for 2
+- * clusters (cluster id 0 and 1). set_energy_model() relies on this
+- * feature. It is enforced by a BUG_ON in energy().
++/* An energy model contains core, cluster and system sched group energy
++ * for 2 clusters (cluster id 0 and 1). set_energy_model() relies on
++ * this feature. It is enforced by a BUG_ON in energy().
+  */
+ 
+ struct energy_model {
+ 	struct sched_group_energy *core_energy[2];
+ 	struct sched_group_energy *cluster_energy[2];
++	struct sched_group_energy *system_energy[2];
+ };
+ 
+ static struct energy_model juno_model = {
+ 	{ &energy_core_juno_a57, &energy_core_juno_a53, },
+ 	{ &energy_cluster_juno_a57, &energy_cluster_juno_a53, },
++	{},
+ };
+ 
+ static struct energy_model hikey_model = {
+ 	{ &energy_core_hikey, &energy_core_hikey, },
+ 	{ &energy_cluster_hikey, &energy_cluster_hikey, },
++	{},
+ };
+ 
+ static struct of_device_id model_matches[] = {
+@@ -179,14 +182,14 @@ struct energy_model {
+ 	{},
+ };
+ 
+-static struct sched_group_energy **core_energy, **cluster_energy;
++struct sched_group_energy **core_energy, **cluster_energy, **system_energy;
+ 
+ static void __init set_energy_model(void)
+ {
+ 	const struct of_device_id *match;
+ 	struct energy_model *em;
+ 
+-	BUG_ON(core_energy || cluster_energy);
++	BUG_ON(core_energy || cluster_energy || system_energy);
+ 
+ 	match = of_match_node(model_matches, of_root);
+ 
+@@ -197,10 +200,12 @@ static void __init set_energy_model(void)
+ 
+ 	core_energy = em->core_energy;
+ 	cluster_energy = em->cluster_energy;
++	system_energy = em->system_energy;
+ 
+-	pr_debug("energy model core[0,1]=[%p,%p] cluster=[%p,%p]\n",
++	pr_debug("energy model core[0,1]=[%p,%p] cluster=[%p,%p] system=[%p,%p]\n",
+ 		 em->core_energy[0], em->core_energy[1],
+-		 em->cluster_energy[0], em->cluster_energy[1]);
++		 em->cluster_energy[0], em->cluster_energy[1],
++		 em->system_energy[0], em->system_energy[1]);
+ }
+ 
+ static inline
+@@ -211,7 +216,8 @@ struct sched_group_energy *energy(int cpu, struct sched_group_energy **sge)
+ 	BUG_ON(idx != 0 && idx != 1);
+ 
+ 	pr_debug("cpu=%d %s%s[%d]=%p\n", cpu, (sge == core_energy) ?
+-		 "core" : "cluster", "_energy", idx, sge[idx]);
++		 "core" : (sge == cluster_energy) ? "cluster" :
++		 "system", "_energy", idx, sge[idx]);
+ 
+ 	return sge[idx];
+ }
+@@ -227,3 +233,9 @@ const struct sched_group_energy * const cpu_cluster_energy(int cpu)
+ {
+ 	return cluster_energy ? energy(cpu, cluster_energy) : NULL;
+ }
++
++static inline
++const struct sched_group_energy * const cpu_system_energy(int cpu)
++{
++	return system_energy ? energy(cpu, system_energy) : NULL;
++}
+diff --git a/arch/arm64/kernel/topology.c b/arch/arm64/kernel/topology.c
+index baaab53..4062786 100644
+--- a/arch/arm64/kernel/topology.c
++++ b/arch/arm64/kernel/topology.c
+@@ -669,6 +669,7 @@ static void __init reset_cpu_topology(void)
+ 	{ cpu_coregroup_mask, cpu_coregroup_flags, cpu_core_energy, SD_INIT_NAME(MC) },
+ #endif
+ 	{ cpu_cpu_mask, cpu_cpu_flags, cpu_cluster_energy, SD_INIT_NAME(DIE) },
++	{ cpu_cpu_mask, NULL, cpu_system_energy, SD_INIT_NAME(SYS) },
+ 	{ NULL, }
+ };
+ 
+-- 
+1.9.1
+

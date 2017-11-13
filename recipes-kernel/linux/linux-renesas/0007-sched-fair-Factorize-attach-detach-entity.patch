@@ -1,0 +1,142 @@
+From 3fa8e908c327f136ecfa353f7034b19c6b23f852 Mon Sep 17 00:00:00 2001
+From: Vincent Guittot <vincent.guittot@linaro.org>
+Date: Tue, 8 Nov 2016 10:53:42 +0100
+Subject: [PATCH 07/92] sched/fair: Factorize attach/detach entity
+
+Factorize post_init_entity_util_avg() and part of attach_task_cfs_rq()
+in one function attach_entity_cfs_rq().
+
+Create symmetric detach_entity_cfs_rq() function.
+
+Signed-off-by: Vincent Guittot <vincent.guittot@linaro.org>
+Signed-off-by: Peter Zijlstra (Intel) <peterz@infradead.org>
+Acked-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Cc: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Morten.Rasmussen@arm.com
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: bsegall@google.com
+Cc: kernellwp@gmail.com
+Cc: pjt@google.com
+Cc: yuyang.du@intel.com
+Link: http://lkml.kernel.org/r/1478598827-32372-2-git-send-email-vincent.guittot@linaro.org
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+(cherry picked from commit df217913e72ec7e603d8b68cc4c70646cf7000db)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 53 +++++++++++++++++++++++++++++++----------------------
+ 1 file changed, 31 insertions(+), 22 deletions(-)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 5e6c00a..0731aff 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -701,9 +701,7 @@ void init_entity_runnable_average(struct sched_entity *se)
+ }
+ 
+ static inline u64 cfs_rq_clock_task(struct cfs_rq *cfs_rq);
+-static int update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq, bool update_freq);
+-static void update_tg_load_avg(struct cfs_rq *cfs_rq, int force);
+-static void attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se);
++static void attach_entity_cfs_rq(struct sched_entity *se);
+ 
+ /*
+  * With new tasks being created, their initial util_avgs are extrapolated
+@@ -735,7 +733,6 @@ void post_init_entity_util_avg(struct sched_entity *se)
+ 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+ 	struct sched_avg *sa = &se->avg;
+ 	long cap = (long)(SCHED_CAPACITY_SCALE - cfs_rq->avg.util_avg) / 2;
+-	u64 now = cfs_rq_clock_task(cfs_rq);
+ 
+ 	if (cap > 0) {
+ 		if (cfs_rq->avg.util_avg != 0) {
+@@ -763,14 +760,12 @@ void post_init_entity_util_avg(struct sched_entity *se)
+ 			 * such that the next switched_to_fair() has the
+ 			 * expected state.
+ 			 */
+-			se->avg.last_update_time = now;
++			se->avg.last_update_time = cfs_rq_clock_task(cfs_rq);
+ 			return;
+ 		}
+ 	}
+ 
+-	update_cfs_rq_load_avg(now, cfs_rq, false);
+-	attach_entity_load_avg(cfs_rq, se);
+-	update_tg_load_avg(cfs_rq, false);
++	attach_entity_cfs_rq(se);
+ }
+ 
+ #else /* !CONFIG_SMP */
+@@ -8783,30 +8778,19 @@ static inline bool vruntime_normalized(struct task_struct *p)
+ 	return false;
+ }
+ 
+-static void detach_task_cfs_rq(struct task_struct *p)
++static void detach_entity_cfs_rq(struct sched_entity *se)
+ {
+-	struct sched_entity *se = &p->se;
+ 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+ 	u64 now = cfs_rq_clock_task(cfs_rq);
+ 
+-	if (!vruntime_normalized(p)) {
+-		/*
+-		 * Fix up our vruntime so that the current sleep doesn't
+-		 * cause 'unlimited' sleep bonus.
+-		 */
+-		place_entity(cfs_rq, se, 0);
+-		se->vruntime -= cfs_rq->min_vruntime;
+-	}
+-
+ 	/* Catch up with the cfs_rq and remove our load when we leave */
+ 	update_cfs_rq_load_avg(now, cfs_rq, false);
+ 	detach_entity_load_avg(cfs_rq, se);
+ 	update_tg_load_avg(cfs_rq, false);
+ }
+ 
+-static void attach_task_cfs_rq(struct task_struct *p)
++static void attach_entity_cfs_rq(struct sched_entity *se)
+ {
+-	struct sched_entity *se = &p->se;
+ 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+ 	u64 now = cfs_rq_clock_task(cfs_rq);
+ 
+@@ -8818,10 +8802,35 @@ static void attach_task_cfs_rq(struct task_struct *p)
+ 	se->depth = se->parent ? se->parent->depth + 1 : 0;
+ #endif
+ 
+-	/* Synchronize task with its cfs_rq */
++	/* Synchronize entity with its cfs_rq */
+ 	update_cfs_rq_load_avg(now, cfs_rq, false);
+ 	attach_entity_load_avg(cfs_rq, se);
+ 	update_tg_load_avg(cfs_rq, false);
++}
++
++static void detach_task_cfs_rq(struct task_struct *p)
++{
++	struct sched_entity *se = &p->se;
++	struct cfs_rq *cfs_rq = cfs_rq_of(se);
++
++	if (!vruntime_normalized(p)) {
++		/*
++		 * Fix up our vruntime so that the current sleep doesn't
++		 * cause 'unlimited' sleep bonus.
++		 */
++		place_entity(cfs_rq, se, 0);
++		se->vruntime -= cfs_rq->min_vruntime;
++	}
++
++	detach_entity_cfs_rq(se);
++}
++
++static void attach_task_cfs_rq(struct task_struct *p)
++{
++	struct sched_entity *se = &p->se;
++	struct cfs_rq *cfs_rq = cfs_rq_of(se);
++
++	attach_entity_cfs_rq(se);
+ 
+ 	if (!vruntime_normalized(p))
+ 		se->vruntime += cfs_rq->min_vruntime;
+-- 
+1.9.1
+

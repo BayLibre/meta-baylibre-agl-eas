@@ -1,0 +1,84 @@
+From 9994534fcf8c013f6dfbb017055a3be2c8f48a0f Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Tue, 6 Jan 2015 17:34:05 +0000
+Subject: [PATCH 55/92] sched: Estimate energy impact of scheduling decisions
+
+Adds a generic energy-aware helper function, energy_diff(), that
+calculates energy impact of adding, removing, and migrating utilization
+in the system.
+
+cc: Ingo Molnar <mingo@redhat.com>
+cc: Peter Zijlstra <peterz@infradead.org>
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+(cherry picked from commit 6f19a2b0b118f6551e22cf21c1230040a3c4f8a1)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 52 insertions(+)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index dcc73d8..dc1fca0 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -5522,6 +5522,58 @@ static int sched_group_energy(struct energy_env *eenv)
+ 	return 0;
+ }
+ 
++static inline bool cpu_in_sg(struct sched_group *sg, int cpu)
++{
++	return cpu != -1 && cpumask_test_cpu(cpu, sched_group_cpus(sg));
++}
++
++/*
++ * energy_diff(): Estimate the energy impact of changing the utilization
++ * distribution. eenv specifies the change: utilisation amount, source, and
++ * destination cpu. Source or destination cpu may be -1 in which case the
++ * utilization is removed from or added to the system (e.g. task wake-up). If
++ * both are specified, the utilization is migrated.
++ */
++static int energy_diff(struct energy_env *eenv)
++{
++	struct sched_domain *sd;
++	struct sched_group *sg;
++	int sd_cpu = -1, energy_before = 0, energy_after = 0;
++
++	struct energy_env eenv_before = {
++		.util_delta	= 0,
++		.src_cpu	= eenv->src_cpu,
++		.dst_cpu	= eenv->dst_cpu,
++	};
++
++	if (eenv->src_cpu == eenv->dst_cpu)
++		return 0;
++
++	sd_cpu = (eenv->src_cpu != -1) ? eenv->src_cpu : eenv->dst_cpu;
++	sd = rcu_dereference(per_cpu(sd_ea, sd_cpu));
++
++	if (!sd)
++		return 0; /* Error */
++
++	sg = sd->groups;
++
++	do {
++		if (cpu_in_sg(sg, eenv->src_cpu) || cpu_in_sg(sg, eenv->dst_cpu)) {
++			eenv_before.sg_top = eenv->sg_top = sg;
++
++			if (sched_group_energy(&eenv_before))
++				return 0; /* Invalid result abort */
++			energy_before += eenv_before.energy;
++
++			if (sched_group_energy(eenv))
++				return 0; /* Invalid result abort */
++			energy_after += eenv->energy;
++		}
++	} while (sg = sg->next, sg != sd->groups);
++
++	return energy_after-energy_before;
++}
++
+ /*
+  * Detect M:N waker/wakee relationships via a switching-frequency heuristic.
+  *
+-- 
+1.9.1
+

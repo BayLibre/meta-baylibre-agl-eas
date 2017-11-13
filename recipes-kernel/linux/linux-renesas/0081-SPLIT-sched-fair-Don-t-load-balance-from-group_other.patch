@@ -1,0 +1,38 @@
+From 28e38963fbe539c9804d9132aa3613ead32ee330 Mon Sep 17 00:00:00 2001
+From: Brendan Jackman <brendan.jackman@arm.com>
+Date: Wed, 15 Feb 2017 17:17:26 +0000
+Subject: [PATCH 81/92] SPLIT: sched/fair: Don't load balance from group_other
+ to groups without spare capacity
+
+This is split out from 885677858fd "sched: Consider misfit tasks when
+load-balancing" from lsk-4.4-armlt. The rest of that patch will follow, this is
+separated for ease of examination and discussion.
+
+(cherry picked from commit a3e504284acbf3dd12ceec8ebcabaee1892f876e)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index fea3ca8..cf60d93 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -7750,6 +7750,14 @@ static bool update_sd_pick_busiest(struct lb_env *env,
+ 	if (sgs->group_type < busiest->group_type)
+ 		return false;
+ 
++	/*
++	 * Candidate sg doesn't face any serious load-balance problems
++	 * so don't pick it if the local sg is already filled up.
++	 */
++	if (sgs->group_type == group_other &&
++	    !group_has_capacity(env, &sds->local_stat))
++		return false;
++
+ 	if (sgs->avg_load <= busiest->avg_load)
+ 		return false;
+ 
+-- 
+1.9.1
+

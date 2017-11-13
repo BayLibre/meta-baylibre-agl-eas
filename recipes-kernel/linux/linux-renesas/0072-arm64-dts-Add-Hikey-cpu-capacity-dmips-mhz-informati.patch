@@ -1,0 +1,93 @@
+From 9634026b856ae824ed7e2b714c81edd180a36ca3 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Sun, 14 Aug 2016 15:44:31 +0100
+Subject: [PATCH 72/92] arm64, dts: Add Hikey cpu capacity-dmips-mhz
+ information
+
+Hikey is an SMP platform, so this property would normally not be necessary.
+
+But since we drive the setting of the EAS specific sched domain flag
+SD_SHARE_CAP_STATES via the init_cpu_capacity_callback() cpufreq notifier
+we have to make sure that cap_parsing_failed is not set to true in
+parse_cpu_capacity() so that init_cpu_capacity_callback() will bail out
+before consuming the CPUFREQ_NOTIFY. The easiest way to achieve this is to
+provide the dts file with this property.
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 9cffd417af22705fbdafc3264d90e18b175af62b)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm64/boot/dts/hisilicon/hi6220.dtsi | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/hisilicon/hi6220.dtsi b/arch/arm64/boot/dts/hisilicon/hi6220.dtsi
+index 17839db..78af87b 100644
+--- a/arch/arm64/boot/dts/hisilicon/hi6220.dtsi
++++ b/arch/arm64/boot/dts/hisilicon/hi6220.dtsi
+@@ -92,6 +92,7 @@
+ 			#cooling-cells = <2>; /* min followed by max */
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
+ 			dynamic-power-coefficient = <311>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		cpu1: cpu@1 {
+@@ -102,6 +103,7 @@
+ 			next-level-cache = <&CLUSTER0_L2>;
+ 			operating-points-v2 = <&cpu_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		cpu2: cpu@2 {
+@@ -112,6 +114,7 @@
+ 			next-level-cache = <&CLUSTER0_L2>;
+ 			operating-points-v2 = <&cpu_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		cpu3: cpu@3 {
+@@ -122,6 +125,7 @@
+ 			next-level-cache = <&CLUSTER0_L2>;
+ 			operating-points-v2 = <&cpu_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		cpu4: cpu@100 {
+@@ -132,6 +136,7 @@
+ 			next-level-cache = <&CLUSTER1_L2>;
+ 			operating-points-v2 = <&cpu_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		cpu5: cpu@101 {
+@@ -142,6 +147,7 @@
+ 			next-level-cache = <&CLUSTER1_L2>;
+ 			operating-points-v2 = <&cpu_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		cpu6: cpu@102 {
+@@ -152,6 +158,7 @@
+ 			next-level-cache = <&CLUSTER1_L2>;
+ 			operating-points-v2 = <&cpu_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		cpu7: cpu@103 {
+@@ -162,6 +169,7 @@
+ 			next-level-cache = <&CLUSTER1_L2>;
+ 			operating-points-v2 = <&cpu_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
++			capacity-dmips-mhz = <1024>;
+ 		};
+ 
+ 		CLUSTER0_L2: l2-cache0 {
+-- 
+1.9.1
+

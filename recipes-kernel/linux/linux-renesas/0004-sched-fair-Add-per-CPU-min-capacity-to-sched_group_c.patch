@@ -1,0 +1,143 @@
+From 9a434b62bbd9621f05318569949b59d37a0f59ce Mon Sep 17 00:00:00 2001
+From: Morten Rasmussen <morten.rasmussen@arm.com>
+Date: Fri, 14 Oct 2016 14:41:09 +0100
+Subject: [PATCH 04/92] sched/fair: Add per-CPU min capacity to
+ sched_group_capacity
+
+struct sched_group_capacity currently represents the compute capacity
+sum of all CPUs in the sched_group.
+
+Unless it is divided by the group_weight to get the average capacity
+per CPU, it hides differences in CPU capacity for mixed capacity systems
+(e.g. high RT/IRQ utilization or ARM big.LITTLE).
+
+But even the average may not be sufficient if the group covers CPUs of
+different capacities.
+
+Instead, by extending struct sched_group_capacity to indicate min per-CPU
+capacity in the group a suitable group for a given task utilization can
+more easily be found such that CPUs with reduced capacity can be avoided
+for tasks with high utilization (not implemented by this patch).
+
+Signed-off-by: Morten Rasmussen <morten.rasmussen@arm.com>
+Signed-off-by: Peter Zijlstra (Intel) <peterz@infradead.org>
+Cc: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: dietmar.eggemann@arm.com
+Cc: freedom.tan@mediatek.com
+Cc: keita.kobayashi.ym@renesas.com
+Cc: mgalbraith@suse.de
+Cc: sgurrappadi@nvidia.com
+Cc: vincent.guittot@linaro.org
+Cc: yuyang.du@intel.com
+Link: http://lkml.kernel.org/r/1476452472-24740-4-git-send-email-morten.rasmussen@arm.com
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+(cherry picked from commit bf475ce0a3dd75b5d1df6c6c14ae25168caa15ac)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/core.c  |  3 ++-
+ kernel/sched/fair.c  | 17 ++++++++++++-----
+ kernel/sched/sched.h |  3 ++-
+ 3 files changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 154fd68..e891e12 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -5707,7 +5707,7 @@ static int sched_domain_debug_one(struct sched_domain *sd, int cpu, int level,
+ 		printk(KERN_CONT " %*pbl",
+ 		       cpumask_pr_args(sched_group_cpus(group)));
+ 		if (group->sgc->capacity != SCHED_CAPACITY_SCALE) {
+-			printk(KERN_CONT " (cpu_capacity = %d)",
++			printk(KERN_CONT " (cpu_capacity = %lu)",
+ 				group->sgc->capacity);
+ 		}
+ 
+@@ -6184,6 +6184,7 @@ int group_balance_cpu(struct sched_group *sg)
+ 		 * die on a /0 trap.
+ 		 */
+ 		sg->sgc->capacity = SCHED_CAPACITY_SCALE * cpumask_weight(sg_span);
++		sg->sgc->min_capacity = SCHED_CAPACITY_SCALE;
+ 
+ 		/*
+ 		 * Make sure the first group of this domain contains the
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 1ad3706..faf8f18 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -6909,13 +6909,14 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
+ 
+ 	cpu_rq(cpu)->cpu_capacity = capacity;
+ 	sdg->sgc->capacity = capacity;
++	sdg->sgc->min_capacity = capacity;
+ }
+ 
+ void update_group_capacity(struct sched_domain *sd, int cpu)
+ {
+ 	struct sched_domain *child = sd->child;
+ 	struct sched_group *group, *sdg = sd->groups;
+-	unsigned long capacity;
++	unsigned long capacity, min_capacity;
+ 	unsigned long interval;
+ 
+ 	interval = msecs_to_jiffies(sd->balance_interval);
+@@ -6928,6 +6929,7 @@ void update_group_capacity(struct sched_domain *sd, int cpu)
+ 	}
+ 
+ 	capacity = 0;
++	min_capacity = ULONG_MAX;
+ 
+ 	if (child->flags & SD_OVERLAP) {
+ 		/*
+@@ -6952,11 +6954,12 @@ void update_group_capacity(struct sched_domain *sd, int cpu)
+ 			 */
+ 			if (unlikely(!rq->sd)) {
+ 				capacity += capacity_of(cpu);
+-				continue;
++			} else {
++				sgc = rq->sd->groups->sgc;
++				capacity += sgc->capacity;
+ 			}
+ 
+-			sgc = rq->sd->groups->sgc;
+-			capacity += sgc->capacity;
++			min_capacity = min(capacity, min_capacity);
+ 		}
+ 	} else  {
+ 		/*
+@@ -6966,12 +6969,16 @@ void update_group_capacity(struct sched_domain *sd, int cpu)
+ 
+ 		group = child->groups;
+ 		do {
+-			capacity += group->sgc->capacity;
++			struct sched_group_capacity *sgc = group->sgc;
++
++			capacity += sgc->capacity;
++			min_capacity = min(sgc->min_capacity, min_capacity);
+ 			group = group->next;
+ 		} while (group != child->groups);
+ 	}
+ 
+ 	sdg->sgc->capacity = capacity;
++	sdg->sgc->min_capacity = min_capacity;
+ }
+ 
+ /*
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index 055f935..345c1cc 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -892,7 +892,8 @@ struct sched_group_capacity {
+ 	 * CPU capacity of this group, SCHED_CAPACITY_SCALE being max capacity
+ 	 * for a single CPU.
+ 	 */
+-	unsigned int capacity;
++	unsigned long capacity;
++	unsigned long min_capacity; /* Min per-CPU capacity in group */
+ 	unsigned long next_update;
+ 	int imbalance; /* XXX unrelated to capacity but shared group state */
+ 
+-- 
+1.9.1
+

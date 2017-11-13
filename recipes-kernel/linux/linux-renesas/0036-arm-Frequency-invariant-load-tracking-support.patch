@@ -1,0 +1,134 @@
+From f2b29716bba30b235f4c3a4292bb0ca0465e0031 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Wed, 16 Nov 2016 19:46:35 +0000
+Subject: [PATCH 36/92] arm: Frequency-invariant load-tracking support
+
+Implements arch-specific function scale_freq_capacity() which provides
+the following frequency scaling factor:
+
+  current_freq(cpu) << SCHED_CAPACITY_SHIFT / max_supported_freq(cpu)
+
+The debug output in init_cpu_capacity_callback() has been changed to be
+able to distinguish whether cpu capacity and max frequency or only max
+frequency has been parsed. The latter case happens on systems where there
+is no or broken cpu capacity binding (cpu node property
+capacity-dmips-mhz) information.
+
+One possible consumer of this is the Per-Entity Load Tracking (PELT)
+mechanism of the scheduler's CFS class.
+
+The actual wiring up to the scheduler isn't provided by this patch.
+
+Cc: Russell King <linux@arm.linux.org.uk>
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit fd3bdcb6e9f895ba22de4295e29de4f4e1ed3e77)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm/kernel/topology.c | 57 +++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 51 insertions(+), 6 deletions(-)
+
+diff --git a/arch/arm/kernel/topology.c b/arch/arm/kernel/topology.c
+index b030d01..e521b07 100644
+--- a/arch/arm/kernel/topology.c
++++ b/arch/arm/kernel/topology.c
+@@ -219,6 +219,8 @@ static void normalize_cpu_capacity(void)
+ static bool cap_parsing_done;
+ static void parsing_done_workfn(struct work_struct *work);
+ static DECLARE_WORK(parsing_done_work, parsing_done_workfn);
++static DEFINE_PER_CPU(unsigned long, freq_scale) = SCHED_CAPACITY_SCALE;
++static DEFINE_PER_CPU(unsigned long, max_freq);
+ 
+ static int
+ init_cpu_capacity_callback(struct notifier_block *nb,
+@@ -233,13 +235,14 @@ static void normalize_cpu_capacity(void)
+ 
+ 	switch (val) {
+ 	case CPUFREQ_NOTIFY:
+-		pr_debug("cpu_capacity: init cpu capacity for CPUs [%*pbl] (to_visit=%*pbl)\n",
+-				cpumask_pr_args(policy->related_cpus),
+-				cpumask_pr_args(cpus_to_visit));
++		pr_debug("cpu_capacity: calling %s for CPUs [%*pbl] (to_visit=%*pbl)\n",
++			 __func__, cpumask_pr_args(policy->related_cpus),
++			 cpumask_pr_args(cpus_to_visit));
+ 		cpumask_andnot(cpus_to_visit,
+ 			       cpus_to_visit,
+ 			       policy->related_cpus);
+ 		for_each_cpu(cpu, policy->related_cpus) {
++			per_cpu(max_freq, cpu) = policy->cpuinfo.max_freq;
+ 			if (cap_parsing_failed)
+ 				continue;
+ 			raw_capacity[cpu] = arch_scale_cpu_capacity(NULL, cpu) *
+@@ -250,8 +253,10 @@ static void normalize_cpu_capacity(void)
+ 			if (!cap_parsing_failed) {
+ 				normalize_cpu_capacity();
+ 				kfree(raw_capacity);
++				pr_debug("cpu_capacity: parsing done");
++			} else {
++				pr_debug("cpu_capacity: max frequency parsing done");
+ 			}
+-			pr_debug("cpu_capacity: parsing done");
+ 			cap_parsing_done = true;
+ 			schedule_work(&parsing_done_work);
+ 		}
+@@ -263,16 +268,56 @@ static void normalize_cpu_capacity(void)
+ 	.notifier_call = init_cpu_capacity_callback,
+ };
+ 
++unsigned long scale_freq_capacity(struct sched_domain *sd, int cpu)
++{
++	return per_cpu(freq_scale, cpu);
++}
++
++static void set_freq_scale(unsigned int cpu, unsigned long freq)
++{
++	unsigned long max = per_cpu(max_freq, cpu);
++
++	if (!max)
++		return;
++
++	per_cpu(freq_scale, cpu) = (freq << SCHED_CAPACITY_SHIFT) / max;
++}
++
++static int
++set_freq_scale_callback(struct notifier_block *nb,
++			unsigned long val,
++			void *data)
++{
++	struct cpufreq_freqs *freq = data;
++
++	switch (val) {
++	case CPUFREQ_PRECHANGE:
++		set_freq_scale(freq->cpu, freq->new);
++	}
++	return 0;
++}
++
++static struct notifier_block set_freq_scale_notifier = {
++	.notifier_call = set_freq_scale_callback,
++};
+ static int __init register_cpufreq_notifier(void)
+ {
++	int ret;
++
+ 	if (!alloc_cpumask_var(&cpus_to_visit, GFP_KERNEL)) {
+ 		pr_err("cpu_capacity: failed to allocate memory for cpus_to_visit\n");
+ 		return -ENOMEM;
+ 	}
+ 	cpumask_copy(cpus_to_visit, cpu_possible_mask);
+ 
+-	return cpufreq_register_notifier(&init_cpu_capacity_notifier,
+-					 CPUFREQ_POLICY_NOTIFIER);
++	ret = cpufreq_register_notifier(&init_cpu_capacity_notifier,
++					CPUFREQ_POLICY_NOTIFIER);
++
++	if (ret)
++		return ret;
++
++	return cpufreq_register_notifier(&set_freq_scale_notifier,
++					 CPUFREQ_TRANSITION_NOTIFIER);
+ }
+ core_initcall(register_cpufreq_notifier);
+ 
+-- 
+1.9.1
+

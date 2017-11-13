@@ -1,0 +1,49 @@
+From f02fa9f5a150721451b41d9677f9c5f5710c09a9 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Sun, 10 May 2015 15:17:32 +0100
+Subject: [PATCH 62/92] sched: Consider a not over-utilized energy-aware system
+ as balanced
+
+In case the system operates below the tipping point indicator,
+introduced in ("sched: Add over-utilization/tipping point
+indicator"), bail out in find_busiest_group after the dst and src
+group statistics have been checked.
+
+There is simply no need to move usage around because all involved
+cpus still have spare cycles available.
+
+For an energy-aware system below its tipping point,  we rely on the
+task placement of the wakeup path. This works well for short running
+tasks.
+
+The existence of long running tasks on one of the involved cpus lets
+the system operate over its tipping point. To be able to move such
+a task (whose load can't be used to average the load among the cpus)
+from a src cpu with lower capacity than the dst_cpu, an additional
+rule has to be implemented in need_active_balance.
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit e604c981fa91a5e5522cd4a5a057880ab54d374c)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/fair.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 3c193f5..360e922 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -8103,6 +8103,10 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
+ 	 * this level.
+ 	 */
+ 	update_sd_lb_stats(env, &sds);
++
++	if (energy_aware() && !env->dst_rq->rd->overutilized)
++		goto out_balanced;
++
+ 	local = &sds.local_stat;
+ 	busiest = &sds.busiest_stat;
+ 
+-- 
+1.9.1
+

@@ -1,0 +1,83 @@
+From e869e7130e9fcb8b44fd20b11ba4eee166f3f958 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Mon, 21 Nov 2016 16:42:17 +0000
+Subject: [PATCH 35/92] arm: Make cpufreq policy notifier usable for
+ frequency-invariant load-tracking support
+
+The maximum supported frequency of a cpu (policy->cpuinfo.max_freq) has
+to be retrieved for frequency-invariant load-tracking.
+
+This can be achieved by coding this functionality into the existing
+cpufreq policy notifier (init_cpu_capacity_notifier) which is currently
+only used for setting up dt-based cpu capacities (cpu node property
+capacity-dmips-mhz).
+
+But frequency-invariant load-tracking has to work whether cpu capacity
+dt-parsing succeeded or not.
+
+Change init_cpu_capacity_notifier in such a way that even if the parsing
+of the cpu capacity information failed the notifier is called for each
+cpufreq policy to be able to set the maximum supported frequency.
+
+The continue statement in init_cpu_capacity_callback() makes sure that we
+don't go on calculating cap_scale in case the capacity parsing failed. The
+whole implementation makes only sense as soon the code to set the per-cpu
+variable max_freq is introduced by the following patch ("arm:
+Frequency-invariant load-tracking support").
+
+Cc: Russell King <linux@arm.linux.org.uk>
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit e47eb4cac39817612543425e7d64cd30a6baf684)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm/kernel/topology.c | 15 ++++++++-------
+ 1 file changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/arch/arm/kernel/topology.c b/arch/arm/kernel/topology.c
+index f0957f3..b030d01 100644
+--- a/arch/arm/kernel/topology.c
++++ b/arch/arm/kernel/topology.c
+@@ -228,7 +228,7 @@ static void normalize_cpu_capacity(void)
+ 	struct cpufreq_policy *policy = data;
+ 	int cpu;
+ 
+-	if (cap_parsing_failed || cap_parsing_done)
++	if (cap_parsing_done)
+ 		return 0;
+ 
+ 	switch (val) {
+@@ -240,14 +240,18 @@ static void normalize_cpu_capacity(void)
+ 			       cpus_to_visit,
+ 			       policy->related_cpus);
+ 		for_each_cpu(cpu, policy->related_cpus) {
++			if (cap_parsing_failed)
++				continue;
+ 			raw_capacity[cpu] = arch_scale_cpu_capacity(NULL, cpu) *
+ 					    policy->cpuinfo.max_freq / 1000UL;
+ 			capacity_scale = max(raw_capacity[cpu], capacity_scale);
+ 		}
+ 		if (cpumask_empty(cpus_to_visit)) {
+-			normalize_cpu_capacity();
+-			kfree(raw_capacity);
+-			pr_debug("cpu_capacity: parsing done\n");
++			if (!cap_parsing_failed) {
++				normalize_cpu_capacity();
++				kfree(raw_capacity);
++			}
++			pr_debug("cpu_capacity: parsing done");
+ 			cap_parsing_done = true;
+ 			schedule_work(&parsing_done_work);
+ 		}
+@@ -261,9 +265,6 @@ static void normalize_cpu_capacity(void)
+ 
+ static int __init register_cpufreq_notifier(void)
+ {
+-	if (cap_parsing_failed)
+-		return -EINVAL;
+-
+ 	if (!alloc_cpumask_var(&cpus_to_visit, GFP_KERNEL)) {
+ 		pr_err("cpu_capacity: failed to allocate memory for cpus_to_visit\n");
+ 		return -ENOMEM;
+-- 
+1.9.1
+

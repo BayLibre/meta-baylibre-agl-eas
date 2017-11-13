@@ -1,0 +1,27 @@
+From 98f9117448e3de1af4886892b3bf011aedebc4e8 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Mon, 21 Nov 2016 12:24:49 +0000
+Subject: [PATCH 33/92] fixup! arm: #include <linux/cpufreq.h>
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 9744ccb31b7c454f7355ca2f8545a23b8cb76b15)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm/kernel/topology.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/kernel/topology.c b/arch/arm/kernel/topology.c
+index e79ac85..46167bf 100644
+--- a/arch/arm/kernel/topology.c
++++ b/arch/arm/kernel/topology.c
+@@ -21,6 +21,7 @@
+ #include <linux/of.h>
+ #include <linux/sched.h>
+ #include <linux/slab.h>
++#include <linux/cpufreq.h>
+ 
+ #include <asm/cputype.h>
+ #include <asm/topology.h>
+-- 
+1.9.1
+

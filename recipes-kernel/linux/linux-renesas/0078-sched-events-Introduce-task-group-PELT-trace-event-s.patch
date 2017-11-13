@@ -1,0 +1,91 @@
+From cf1dd9ac6f0b61e88c4dbeb57aaee06de5f6a250 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Thu, 13 Oct 2016 12:20:12 +0100
+Subject: [PATCH 78/92] sched/events: Introduce task group PELT trace event
+ sched_pelt_tg()
+
+The trace event is only defined if symmetric multi-processing
+(CONFIG_SMP) and group scheduling support for SCHED_OTHER
+(CONFIG_FAIR_GROUP_SCHED) are enabled.
+
+The cfs_rq owned by the task group is used as the only parameter for the
+trace event because it has a reference to the task group and the cpu.
+Using the task group as a parameter instead would require the cpu as a
+second parameter.
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 9099eec7854949cf30adf1b5ee026821e1d53e83)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ include/trace/events/sched.h | 33 +++++++++++++++++++++++++++++++++
+ kernel/sched/fair.c          |  5 ++++-
+ 2 files changed, 37 insertions(+), 1 deletion(-)
+
+diff --git a/include/trace/events/sched.h b/include/trace/events/sched.h
+index 58ba3d5..e269b04 100644
+--- a/include/trace/events/sched.h
++++ b/include/trace/events/sched.h
+@@ -666,6 +666,39 @@ static inline long __trace_sched_switch_state(bool preempt, struct task_struct *
+ 		  __entry->period_contrib, __entry->last_update_time,
+ 		  __entry->runnable_load_avg, __entry->runnable_load_sum)
+ );
++
++/*
++ * Tracepoint for task group Per Entity Load Tracking (PELT).
++ */
++#ifdef CONFIG_FAIR_GROUP_SCHED
++TRACE_EVENT(sched_pelt_tg,
++
++	TP_PROTO(struct cfs_rq *cfs_rq),
++
++	TP_ARGS(cfs_rq),
++
++	TP_STRUCT__entry(
++		__field( int,		cpu			)
++		__field( int,		id			)
++		__field( long,		load_avg		)
++		__field( unsigned long,	shares			)
++		__field( unsigned long,	tg_load_avg_contrib	)
++	),
++
++	TP_fast_assign(
++		__entry->cpu			= cfs_rq->rq->cpu;
++		__entry->id			= cfs_rq->tg->css.id;
++		__entry->load_avg		= atomic_long_read(&cfs_rq->tg->load_avg);
++		__entry->shares			= scale_load_down(cfs_rq->tg->shares);
++		__entry->tg_load_avg_contrib	= cfs_rq->tg_load_avg_contrib;
++	),
++
++	TP_printk("cpu=%d tg_css_id=%d load_avg=%ld shares=%lu"
++		  " tg_load_avg_contrib=%lu",
++		  __entry->cpu, __entry->id, __entry->load_avg,
++		  __entry->shares, __entry->tg_load_avg_contrib)
++);
++#endif /* CONFIG_FAIR_GROUP_SCHED */
+ #endif /* CONFIG_SMP */
+ #endif /* _TRACE_SCHED_H */
+ 
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index fffe7cb..3563486 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -2985,12 +2985,15 @@ static inline void update_tg_load_avg(struct cfs_rq *cfs_rq, int force)
+ 	 * No need to update load_avg for root_task_group as it is not used.
+ 	 */
+ 	if (cfs_rq->tg == &root_task_group)
+-		return;
++		goto trace;
+ 
+ 	if (force || abs(delta) > cfs_rq->tg_load_avg_contrib / 64) {
+ 		atomic_long_add(delta, &cfs_rq->tg->load_avg);
+ 		cfs_rq->tg_load_avg_contrib = cfs_rq->avg.load_avg;
+ 	}
++
++trace:
++	trace_sched_pelt_tg(cfs_rq);
+ }
+ 
+ /*
+-- 
+1.9.1
+

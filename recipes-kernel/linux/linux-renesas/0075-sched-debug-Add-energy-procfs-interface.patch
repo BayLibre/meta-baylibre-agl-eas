@@ -1,0 +1,161 @@
+From 066fa940b25dc58b6618b785d82c90cbaa9b54d5 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Fri, 14 Nov 2014 16:25:50 +0000
+Subject: [PATCH 75/92] sched/debug: Add energy procfs interface
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch makes the energy data available via procfs. The related files
+are placed as sub-directory named 'energy' inside the
+/proc/sys/kernel/sched_domain/cpuX/domainY/groupZ directory for those
+cpu/domain/group tuples which have energy information.
+
+The following example depicts the contents of
+/proc/sys/kernel/sched_domain/cpu0/domain0/group[01] for a system which
+has energy information attached to domain level 0.
+
+├── cpu0
+│   ├── domain0
+│   │   ├── busy_factor
+│   │   ├── busy_idx
+│   │   ├── cache_nice_tries
+│   │   ├── flags
+│   │   ├── forkexec_idx
+│   │   ├── group0
+│   │   │   └── energy
+│   │   │       ├── cap_states
+│   │   │       ├── idle_states
+│   │   │       ├── nr_cap_states
+│   │   │       └── nr_idle_states
+│   │   ├── group1
+│   │   │   └── energy
+│   │   │       ├── cap_states
+│   │   │       ├── idle_states
+│   │   │       ├── nr_cap_states
+│   │   │       └── nr_idle_states
+│   │   ├── idle_idx
+│   │   ├── imbalance_pct
+│   │   ├── max_interval
+│   │   ├── max_newidle_lb_cost
+│   │   ├── min_interval
+│   │   ├── name
+│   │   ├── newidle_idx
+│   │   └── wake_idx
+│   └── domain1
+│       ├── busy_factor
+│       ├── busy_idx
+│       ├── cache_nice_tries
+│       ├── flags
+│       ├── forkexec_idx
+│       ├── idle_idx
+│       ├── imbalance_pct
+│       ├── max_interval
+│       ├── max_newidle_lb_cost
+│       ├── min_interval
+│       ├── name
+│       ├── newidle_idx
+│       └── wake_idx
+
+The files 'nr_idle_states' and 'nr_cap_states' contain a scalar value
+whereas 'idle_states' and 'cap_states' contain a vector of power
+consumption at this idle state respectively (compute capacity, power
+consumption) at this capacity state.
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit 6bc112e3c581d16e3ebb7eb7abd396b7a2048169)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/debug.c | 67 ++++++++++++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 65 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/sched/debug.c b/kernel/sched/debug.c
+index fa178b6..48a621c 100644
+--- a/kernel/sched/debug.c
++++ b/kernel/sched/debug.c
+@@ -261,9 +261,60 @@ static void sd_free_ctl_entry(struct ctl_table **tablep)
+ }
+ 
+ static struct ctl_table *
++sd_alloc_ctl_energy_table(struct sched_group_energy *sge)
++{
++	struct ctl_table *table = sd_alloc_ctl_entry(5);
++
++	if (table == NULL)
++		return NULL;
++
++	set_table_entry(&table[0], "nr_idle_states", &sge->nr_idle_states,
++			sizeof(int), 0644, proc_dointvec_minmax, false);
++	set_table_entry(&table[1], "idle_states", &sge->idle_states[0].power,
++			sge->nr_idle_states*sizeof(struct idle_state), 0644,
++			proc_doulongvec_minmax, false);
++	set_table_entry(&table[2], "nr_cap_states", &sge->nr_cap_states,
++			sizeof(int), 0644, proc_dointvec_minmax, false);
++	set_table_entry(&table[3], "cap_states", &sge->cap_states[0].cap,
++			sge->nr_cap_states*sizeof(struct capacity_state), 0644,
++			proc_doulongvec_minmax, false);
++
++	return table;
++}
++
++static struct ctl_table *
++sd_alloc_ctl_group_table(struct sched_group *sg)
++{
++	struct ctl_table *table = sd_alloc_ctl_entry(2);
++
++	if (table == NULL)
++		return NULL;
++
++	table->procname = kstrdup("energy", GFP_KERNEL);
++	table->mode = 0555;
++	table->child = sd_alloc_ctl_energy_table((struct sched_group_energy *)sg->sge);
++
++	return table;
++}
++
++static struct ctl_table *
+ sd_alloc_ctl_domain_table(struct sched_domain *sd)
+ {
+-	struct ctl_table *table = sd_alloc_ctl_entry(14);
++	struct ctl_table *table;
++	unsigned int nr_entries = 14;
++
++	int i = 0;
++	struct sched_group *sg = sd->groups;
++
++	if (sg->sge) {
++		int nr_sgs = 0;
++
++		do {} while (nr_sgs++, sg = sg->next, sg != sd->groups);
++
++		nr_entries += nr_sgs;
++	}
++
++	table = sd_alloc_ctl_entry(nr_entries);
+ 
+ 	if (table == NULL)
+ 		return NULL;
+@@ -296,7 +347,19 @@ static void sd_free_ctl_entry(struct ctl_table **tablep)
+ 		sizeof(long), 0644, proc_doulongvec_minmax, false);
+ 	set_table_entry(&table[12], "name", sd->name,
+ 		CORENAME_MAX_SIZE, 0444, proc_dostring, false);
+-	/* &table[13] is terminator */
++	sg = sd->groups;
++	if (sg->sge) {
++		char buf[32];
++		struct ctl_table *entry = &table[13];
++
++		do {
++			snprintf(buf, 32, "group%d", i);
++			entry->procname = kstrdup(buf, GFP_KERNEL);
++			entry->mode = 0555;
++			entry->child = sd_alloc_ctl_group_table(sg);
++		} while (entry++, i++, sg = sg->next, sg != sd->groups);
++	}
++	/* &table[nr_entries-1] is terminator */
+ 
+ 	return table;
+ }
+-- 
+1.9.1
+

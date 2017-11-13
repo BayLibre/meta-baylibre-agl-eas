@@ -1,0 +1,44 @@
+From b56fd2c55df1136d076d89c88bb4db6877a58fea Mon Sep 17 00:00:00 2001
+From: Viresh Kumar <viresh.kumar@linaro.org>
+Date: Tue, 15 Nov 2016 13:53:20 +0530
+Subject: [PATCH 16/92] cpufreq: schedutil: Avoid indented labels
+
+Switch to the more common practice of writing labels.
+
+Suggested-by: Peter Zijlstra <peterz@infradead.org>
+Signed-off-by: Viresh Kumar <viresh.kumar@linaro.org>
+Signed-off-by: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+(cherry picked from commit 8e2ddb03643eb9d0bc4926946d7ce0d308eef0a5)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/cpufreq_schedutil.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
+index 69e0689..8c4e165 100644
+--- a/kernel/sched/cpufreq_schedutil.c
++++ b/kernel/sched/cpufreq_schedutil.c
+@@ -454,17 +454,17 @@ static int sugov_init(struct cpufreq_policy *policy)
+ 	if (ret)
+ 		goto fail;
+ 
+- out:
++out:
+ 	mutex_unlock(&global_tunables_lock);
+ 
+ 	cpufreq_enable_fast_switch(policy);
+ 	return 0;
+ 
+- fail:
++fail:
+ 	policy->governor_data = NULL;
+ 	sugov_tunables_free(tunables);
+ 
+- free_sg_policy:
++free_sg_policy:
+ 	mutex_unlock(&global_tunables_lock);
+ 
+ 	sugov_policy_free(sg_policy);
+-- 
+1.9.1
+

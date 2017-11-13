@@ -1,0 +1,204 @@
+From 3477712d21ac713611aa74f9f5a6ff4b1e49a930 Mon Sep 17 00:00:00 2001
+From: Dietmar Eggemann <dietmar.eggemann@arm.com>
+Date: Thu, 30 Jul 2015 16:53:30 +0100
+Subject: [PATCH 49/92] sched: EAS & cpu hotplug interoperability
+
+For Energy-Aware Scheduling (EAS) to work properly, even in the case that
+cpus are hot-plugged out, the energy model (EM) data on all energy-aware
+sched domains has to be present for all online cpus.
+
+Mainline sd hierarchy setup code will remove sd's which are not useful for
+task scheduling e.g. in the following situations:
+
+1. Only one cpu remains in one cluster of a two cluster system.
+
+   This remaining cpu only has DIE and no MC sd.
+
+2. A complete cluster in a two-cluster system is hot-plugged out.
+
+   The cpus of the remaining cluster only have MC and no DIE sd.
+
+To make sure that all online cpus keep all their energy-aware sd's,
+the sd degenerate functionality has been changed to not free sd's if
+their first sg contains EM data in case:
+
+1. There is only one cpu left in the sd.
+
+2. There have to be at least 2 sg's if certain sd flags are set.
+
+Instead of freeing such an sd it now clears only its SD_LOAD_BALANCE
+flag.
+
+This will make sure that the EAS functionality will always see all
+energy-aware sd's for all online cpus.
+
+It will introduce a (small ?) performance degradation since the
+hot-path macro for_each_domain() has to deal with sd's not
+contributing to task-scheduling at all now. There is the handling
+of newidle decay values before the SD_LOAD_BALANCE check in
+rebalance_domains().
+But generally, code to make sure that task scheduling is not invoked
+on these sd's is in place (if (!(sd->flags & SD_LOAD_BALANCE))
+already.
+
+This patch has been tested on a single (a7) cluster TC2 system. I.e. we
+could abandon the SYS sd level patch and use this patch to solve all
+problems related to sd topology setups and runtime changes.
+
+This patch should not be squashed.
+
+Test (w/ CONFIG_SCHED_DEBUG):
+
+JUNO:
+
+$ cat /proc/cpuinfo | grep "^CPU part"
+CPU part        : 0xd03
+CPU part        : 0xd07
+CPU part        : 0xd07
+CPU part        : 0xd03
+CPU part        : 0xd03
+CPU part        : 0xd03
+
+$ cat /proc/sys/kernel/sched_domain/cpu*/domain*/{name,flags}
+
+MC
+DIE
+MC
+DIE
+MC
+DIE
+MC
+DIE
+MC
+DIE
+MC
+DIE
+33583 - 0x832f
+4143  - 0x102f
+33583
+4143
+33583
+4143
+33583
+4143
+33583
+4143
+33583
+4143
+
+Hotplug-out A57 cluster
+
+$ echo 0 > /sys/devices/system/cpu/cpu1/online
+$ echo 0 > /sys/devices/system/cpu/cpu2/online
+
+$ cat /proc/sys/kernel/sched_domain/cpu*/domain*/{name,flags}
+
+MC
+DIE
+MC
+DIE
+MC
+DIE
+MC
+DIE
+33583
+4142  - 0x102e <-- !SD_LOAD_BALANCE
+33583
+4142
+33583
+4142
+33583
+4142
+
+Signed-off-by: Dietmar Eggemann <dietmar.eggemann@arm.com>
+(cherry picked from commit a5ebdd0fe5357fe125d9603d766adc69e7607981)
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ kernel/sched/core.c | 17 ++++++++++-------
+ kernel/sched/fair.c |  7 +++++--
+ 2 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 083b318..f31ea62 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -5663,9 +5663,6 @@ static int sched_domain_debug_one(struct sched_domain *sd, int cpu, int level,
+ 
+ 	if (!(sd->flags & SD_LOAD_BALANCE)) {
+ 		printk("does not load-balance\n");
+-		if (sd->parent)
+-			printk(KERN_ERR "ERROR: !SD_LOAD_BALANCE domain"
+-					" has parent");
+ 		return -1;
+ 	}
+ 
+@@ -5760,8 +5757,12 @@ static inline bool sched_debug(void)
+ 
+ static int sd_degenerate(struct sched_domain *sd)
+ {
+-	if (cpumask_weight(sched_domain_span(sd)) == 1)
+-		return 1;
++	if (cpumask_weight(sched_domain_span(sd)) == 1) {
++		if (sd->groups->sge)
++			sd->flags &= ~SD_LOAD_BALANCE;
++		else
++			return 1;
++	}
+ 
+ 	/* Following flags need at least 2 groups */
+ 	if (sd->flags & (SD_LOAD_BALANCE |
+@@ -5805,6 +5806,10 @@ static int sd_degenerate(struct sched_domain *sd)
+ 				SD_SHARE_PKG_RESOURCES |
+ 				SD_PREFER_SIBLING |
+ 				SD_SHARE_POWERDOMAIN);
++		if (parent->groups->sge) {
++			parent->flags &= ~SD_LOAD_BALANCE;
++			return 0;
++		}
+ 		if (nr_node_ids == 1)
+ 			pflags &= ~SD_SERIALIZE;
+ 	}
+@@ -7098,8 +7103,6 @@ static int build_sched_domains(const struct cpumask *cpu_map,
+ 				*per_cpu_ptr(d.sd, i) = sd;
+ 			if (tl->flags & SDTL_OVERLAP || sched_feat(FORCE_SD_OVERLAP))
+ 				sd->flags |= SD_OVERLAP;
+-			if (cpumask_equal(cpu_map, sched_domain_span(sd)))
+-				break;
+ 		}
+ 	}
+ 
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index fa393d9..c7d9bbf 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -7457,6 +7457,9 @@ static inline enum fbq_type fbq_classify_rq(struct rq *rq)
+ }
+ #endif /* CONFIG_NUMA_BALANCING */
+ 
++#define lb_sd_parent(sd) \
++        (sd->parent && sd->parent->groups != sd->parent->groups->next)
++
+ /**
+  * update_sd_lb_stats - Update sched_domain's statistics for load balancing.
+  * @env: The load balancing environment.
+@@ -7530,7 +7533,7 @@ static inline void update_sd_lb_stats(struct lb_env *env, struct sd_lb_stats *sd
+ 
+ 	env->src_grp_nr_running = sds->busiest_stat.sum_nr_running;
+ 
+-	if (!env->sd->parent) {
++	if (!lb_sd_parent(env->sd)) {
+ 		/* update overload indicator if we are at root domain */
+ 		if (env->dst_rq->rd->overload != overload)
+ 			env->dst_rq->rd->overload = overload;
+@@ -7989,7 +7992,7 @@ static int load_balance(int this_cpu, struct rq *this_rq,
+ 			int *continue_balancing)
+ {
+ 	int ld_moved, cur_ld_moved, active_balance = 0;
+-	struct sched_domain *sd_parent = sd->parent;
++	struct sched_domain *sd_parent = lb_sd_parent(sd) ? sd->parent : NULL;
+ 	struct sched_group *group;
+ 	struct rq *busiest;
+ 	unsigned long flags;
+-- 
+1.9.1
+
