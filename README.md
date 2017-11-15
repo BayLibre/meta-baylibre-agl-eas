@@ -41,3 +41,25 @@ source meta-agl/scripts/aglsetup.sh -m $MACHINE -b <your-other-features> eas
 ```
 
 With this `meta-baylibre-agl-eas` will be added to your `conf/bblayers.conf`.
+
+## III. Background information:
+
+Several techniques for saving energy through various scheduler
+modifications have been proposed in the past, however most of the
+techniques have not been universally beneficial for all use-cases and
+platforms. For example, consolidating tasks on fewer cpus is an
+effective way to save energy on some platforms, while it might make
+things worse on others.
+
+This proposal, which is inspired by the Ksummit workshop discussions in
+2013 [1], takes a different approach by using a (relatively) simple
+platform energy cost model to guide scheduling decisions. By providing
+the model with platform specific costing data the model can provide a
+estimate of the energy implications of scheduling decisions. So instead
+of blindly applying scheduling techniques that may or may not work for
+the current use-case, the scheduler can make informed energy-aware
+decisions. We believe this approach provides a methodology that can be
+adapted to any platform, including heterogeneous systems such as ARM
+big.LITTLE. The model considers cpus only, i.e. no peripherals, GPU or
+memory. Model data includes power consumption at each P-state and
+C-state.
