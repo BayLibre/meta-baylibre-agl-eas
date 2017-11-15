@@ -63,3 +63,7 @@ adapted to any platform, including heterogeneous systems such as ARM
 big.LITTLE. The model considers cpus only, i.e. no peripherals, GPU or
 memory. Model data includes power consumption at each P-state and
 C-state.
+
+## IV. Further reading:
+
+https://developer.arm.com/open-source/energy-aware-scheduling
