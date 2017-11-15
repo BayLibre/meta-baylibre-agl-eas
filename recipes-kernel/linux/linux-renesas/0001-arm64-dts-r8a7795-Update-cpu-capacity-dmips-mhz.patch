@@ -1,0 +1,59 @@
+From 59c433df0378f573a9928a8c94573fdf570138a6 Mon Sep 17 00:00:00 2001
+From: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+Date: Wed, 15 Nov 2017 11:28:32 +0900
+Subject: [PATCH 1/4] arm64: dts: r8a7795: Update cpu capacity-dmips-mhz
+
+Since the cpu_capacity for CA53 was set smaller than expected, the
+behavior of scheduler may not be suitable a little. This patch fixes
+the reasonable value to fit current implementation. This value should
+be updated again when the turbo mode and big little architecture will
+support with cpu capacity features.
+
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm64/boot/dts/renesas/r8a7795.dtsi | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/r8a7795.dtsi b/arch/arm64/boot/dts/renesas/r8a7795.dtsi
+index eff01d6..4e44a94 100644
+--- a/arch/arm64/boot/dts/renesas/r8a7795.dtsi
++++ b/arch/arm64/boot/dts/renesas/r8a7795.dtsi
+@@ -165,7 +165,7 @@
+ 			dynamic-power-coefficient = <277>;
+ 			clocks =<&cpg CPG_CORE R8A7795_CLK_Z2>;
+ 			operating-points-v2 = <&cluster1_opp_tb0>;
+-			capacity-dmips-mhz = <379>;
++			capacity-dmips-mhz = <540>;
+ 		};
+ 
+ 		a53_1: cpu@101 {
+@@ -175,7 +175,7 @@
+ 			next-level-cache = <&L2_CA53>;
+ 			enable-method = "psci";
+ 			operating-points-v2 = <&cluster1_opp_tb0>;
+-			capacity-dmips-mhz = <379>;
++			capacity-dmips-mhz = <540>;
+ 		};
+ 
+ 		a53_2: cpu@102 {
+@@ -185,7 +185,7 @@
+ 			next-level-cache = <&L2_CA53>;
+ 			enable-method = "psci";
+ 			operating-points-v2 = <&cluster1_opp_tb0>;
+-			capacity-dmips-mhz = <379>;
++			capacity-dmips-mhz = <540>;
+ 		};
+ 
+ 		a53_3: cpu@103 {
+@@ -195,7 +195,7 @@
+ 			next-level-cache = <&L2_CA53>;
+ 			enable-method = "psci";
+ 			operating-points-v2 = <&cluster1_opp_tb0>;
+-			capacity-dmips-mhz = <379>;
++			capacity-dmips-mhz = <540>;
+ 		};
+ 
+ 		L2_CA57: cache-controller@0 {
+-- 
+2.7.4
+

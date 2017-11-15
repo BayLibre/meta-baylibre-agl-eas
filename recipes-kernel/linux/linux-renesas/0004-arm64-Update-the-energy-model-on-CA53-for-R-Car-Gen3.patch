@@ -1,0 +1,59 @@
+From b3e079ba90ed7ee0e618a441844f3274c6e49e3b Mon Sep 17 00:00:00 2001
+From: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+Date: Wed, 15 Nov 2017 12:34:48 +0900
+Subject: [PATCH 4/4] arm64: Update the energy model on CA53 for R-Car Gen3
+
+Since the cpu_capacity for CA53 was set smaller than expected, the
+behavior of scheduler may not be suitable a little. This patch fixes
+the reasonable value to fit current implementation. This value should
+be updated again when the turbo mode will support with cpu capacity
+features.
+
+Signed-off-by: Gaku Inami <gaku.inami.xw@bp.renesas.com>
+---
+ arch/arm64/kernel/energy_model.h | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm64/kernel/energy_model.h b/arch/arm64/kernel/energy_model.h
+index c2aae4f..f261080 100644
+--- a/arch/arm64/kernel/energy_model.h
++++ b/arch/arm64/kernel/energy_model.h
+@@ -189,7 +189,7 @@ static struct idle_state idle_states_cluster_h3_a57[] = {
+ 
+ static struct capacity_state cap_states_cluster_h3_a53[] = {
+ 	/* Power per cluster */
+-	{ .cap =  379, .power = 16, }, /* 1200 MHz */
++	{ .cap =  432, .power = 16, }, /* 1200 MHz */
+ };
+ 
+ static struct capacity_state cap_states_cluster_h3_a57[] = {
+@@ -231,7 +231,7 @@ static struct idle_state idle_states_core_h3_a57[] = {
+ 
+ static struct capacity_state cap_states_core_h3_a53[] = {
+ 	/* Power per cpu */
+-	{ .cap =  379, .power = 131, }, /* 1200 MHz */
++	{ .cap =  432, .power = 131, }, /* 1200 MHz */
+ };
+ 
+ static struct capacity_state cap_states_core_h3_a57[] = {
+@@ -273,7 +273,7 @@ static struct idle_state idle_states_cluster_m3_a57[] = {
+ 
+ static struct capacity_state cap_states_cluster_m3_a53[] = {
+ 	/* Power per cluster */
+-	{ .cap =  362, .power = 33, }, /* 1200 MHz */
++	{ .cap =  434, .power = 33, }, /* 1200 MHz */
+ };
+ 
+ static struct capacity_state cap_states_cluster_m3_a57[] = {
+@@ -316,7 +316,7 @@ static struct idle_state idle_states_core_m3_a57[] = {
+ 
+ static struct capacity_state cap_states_core_m3_a53[] = {
+ 	/* Power per cpu */
+-	{ .cap =  362, .power = 131, }, /* 1200 MHz */
++	{ .cap =  434, .power = 131, }, /* 1200 MHz */
+ };
+ 
+ static struct capacity_state cap_states_core_m3_a57[] = {
+-- 
+2.7.4
+

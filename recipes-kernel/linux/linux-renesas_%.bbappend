@@ -93,6 +93,10 @@ SRC_URI_append = " \
 	file://0090-arm64-Define-R-CAR-Gen3-energy-and-provide-it-to-the.patch \
 	file://0091-sched-Enable-energy-awareness-a-sched-feature-by-def.patch \
 	file://0092-cpufreq-schedutil-Use-policy-dependent-transition-de.patch \
+	file://0001-arm64-dts-r8a7795-Update-cpu-capacity-dmips-mhz.patch \
+	file://0002-arm64-dts-r8a7796-Update-cpu-capacity-dmips-mhz.patch \
+	file://0003-arm64-dts-r8a7795-es1-Update-cpu-capacity-dmips-mhz.patch \
+	file://0004-arm64-Update-the-energy-model-on-CA53-for-R-Car-Gen3.patch \
 	file://eas.cfg \
 	"
 
